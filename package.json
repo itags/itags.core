@@ -28,6 +28,10 @@
         "node": "*"
     },
     "dependencies": {
+        "js-ext": "itsa/js-ext",
+        "utils": "itsa/utils",
+        "polyfill": "itsa/polyfill",
+        "event-dom": "itsa/event-dom",
         "vdom": "itsa/vdom"
     },
     "devDependencies": {
