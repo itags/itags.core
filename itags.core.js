@@ -2,10 +2,12 @@
 "use strict";
 
 require('js-ext/lib/object.js');
-require('js-ext/lib/function.js');
+require('js-ext/lib/string.js');
 require('polyfill/polyfill-base.js');
 
-var async = require('utils').async,
+var asyncSilent = require('utils').asyncSilent,
+    laterSilent = require('utils').laterSilent,
+    CLASS_CE_HIDDEN_BEFORE_RENDER = 'itag-unrendered',
     NODE = 'node',
     REMOVE = 'remove',
     INSERT = 'insert',
@@ -17,246 +19,279 @@ var async = require('utils').async,
     ATTRIBUTE_REMOVED = ATTRIBUTE+REMOVE,
     ATTRIBUTE_CHANGED = ATTRIBUTE+CHANGE,
     ATTRIBUTE_INSERTED = ATTRIBUTE+INSERT,
+    DELAYED_FINALIZE_EVENTS = {
+        'mousedown': true,
+        'mouseup': true,
+        'mousemove': true,
+        'panmove': true,
+        'panstart': true,
+        'panleft': true,
+        'panright': true,
+        'panup': true,
+        'pandown': true,
+        'pinchmove': true,
+        'rotatemove': true,
+        'focus': true,
+        'blur': true,
+        'keydown': true,
+        'keyup': true,
+        'keypress': true
+    },
+    DELAYED_EVT_TIME = 1000,
+    merge = function (sourceObj, targetObj) {
+        var name;
+        for (name in sourceObj) {
+            if (!(name in targetObj)) {
+                if (name==='init') {
+console.info('store init function');
+/*jshint -W083 */
+                    targetObj._init = function() {
+/*jshint +W083 */
+                        var vnode = targetObj.vnode;
+                        if (!vnode.ce_initialized && !vnode.removedFromDOM) {
+                            sourceObj.init.call(targetObj);
+                            Object.protectedProp(vnode, 'ce_initialized', true);
+                        }
+                    };
+                }
+                else if (name==='destroy') {
+/*jshint -W083 */
+                    targetObj._destroy = function() {
+/*jshint +W083 */
+                        var vnode = targetObj.vnode;
+                        if (!vnode.removedFromDOM && vnode.ce_initialized) {
+                            sourceObj.destroy.call(targetObj);
+                        }
+                    };
+                }
+                else {
+                    targetObj[name] = sourceObj[name];
+                }
+            }
+        }
+    },
     NOOP = function() {};
+
+DELAYED_FINALIZE_EVENTS.keys().forEach(function(key) {
+    DELAYED_FINALIZE_EVENTS[key+'outside'] = true;
+});
 
 module.exports = function (window) {
 
     var DOCUMENT = window.document,
-        ItagBase, MUTATION_EVENTS, itagFilter, Event, renderDomElements,
-        defineProperty, defineProperties, fullMerge;
+        itagCore, MUTATION_EVENTS, Event, registerDelay, focusManager;
 
     require('vdom')(window);
     Event = require('event-dom')(window);
 
-    window.ITAGS || Object.protectedProp(window, 'ITAGS', {});
-
 /*jshint boss:true */
-    if (ItagBase=window.ITAGS.ItagBase) {
+    if (itagCore=window._ItagCore) {
 /*jshint boss:false */
-        return ItagBase; // ItagBase was already defined
+        return itagCore; // itagCore was already defined
     }
+
+    Object.protectedProp(window, 'ITAGS', {});
 
     MUTATION_EVENTS = [NODE_REMOVED, NODE_INSERTED, NODE_CONTENT_CHANGE, ATTRIBUTE_REMOVED, ATTRIBUTE_CHANGED, ATTRIBUTE_INSERTED];
 
-    itagFilter = function(e) {
-        return !!e.target.renderCE;
+    focusManager = function(element) {
+        var focusManagerNode = element.getElement('[focusmanager].focussed');
+        focusManagerNode && focusManagerNode.focus();
     };
 
-    Event.after(
-        [NODE_INSERTED, ATTRIBUTE_CHANGED, ATTRIBUTE_INSERTED, ATTRIBUTE_REMOVED],
-        function(e) {
-            e.target.renderCE();
+    itagCore = {
+
+        itagFilter: function(e) {
+            return !!e.target.renderCE;
         },
-        itagFilter
-    );
 
-    renderDomElements = function(tagName) {
-console.warn('renderDomElements '+tagName);
-        var itagElements = DOCUMENT.getAll(tagName),
-            len = itagElements.length,
-            i, itagElement;
-console.warn('found: '+len);
-        for (i=0; i<len; i++) {
-            itagElement = itagElements[i];
-console.warn(itagElement.getOuterHTML());
-console.warn(itagElement.renderCE);
-            itagElement.renderCE && itagElement.renderCE();
-        }
-    };
+        renderDomElements: function(tagName, renderFn, properties, isParcel) {
+            var itagElements = DOCUMENT.getAll(tagName),
+                len = itagElements.length,
+                i, itagElement;
+            for (i=0; i<len; i++) {
+                itagElement = itagElements[i];
+                this._upgradeElement(itagElement, renderFn, properties, isParcel);
+            }
+        },
+
+        defineParcel: function(parcelName, renderFn, properties) {
+            if (parcelName.contains('-')) {
+                console.warn(parcelName+' should not consist of a minus token');
+                return;
+            }
+            this._defineElement('i-parcel-'+parcelName, renderFn, properties, true);
+        },
 
 
-// Define configurable, writable and non-enumerable props
-// if they don't exist.
-defineProperty = function (object, name, method, force) {
-  if (!force && (name in object)) {
-    return;
-  }
-  Object.defineProperty(object, name, {
-    configurable: true,
-    enumerable: false,
-    writable: true,
-    value: method
-  });
-};
+        defineElement: function(itagName, renderFn, properties) {
+            if (!itagName.contains('-')) {
+                console.warn('defineElement: '+itagName+' should consist of a minus token');
+                return;
+            }
+            this._defineElement(itagName, renderFn, properties);
+        },
 
-defineProperties = function (object, map, force) {
-  var names = Object.keys(map),
-    l = names.length,
-    i = -1,
-    name;
-  while (++i < l) {
-    name = names[i];
-    defineProperty(object, name, map[name], force);
-  }
-};
+        _defineElement: function(itagName, renderFn, properties, isParcel) {
+            itagName = itagName.toLowerCase();
+/*jshint boss:true */
+            if (window.ITAGS[itagName]) {
+/*jshint boss:false */
+                console.warn(itagName+' already exists and cannot be redefined');
+                return;
+            }
+            (typeof renderFn === 'function') || (renderFn=NOOP);
+            this.renderDomElements(itagName, renderFn, properties, isParcel);
+            window.ITAGS[itagName] = this._createElement(itagName, renderFn, properties, isParcel);
+        },
 
-fullMerge = function (sourceObj, targetObj) {
-console.info('merging...');
-    var name;
-    for (name in sourceObj) {
-console.info(name);
-        if (!(name in targetObj)) {
-console.info(name+' will be set');
-            targetObj[name] = sourceObj[name];
-        }
-    }
-};
-
-/**
- * Pollyfils for often used functionality for Function
- * @class Function
-*/
-ItagBase = {};
-
-defineProperties(ItagBase, {
-
-  /**
-   * Merges the given map of properties into the `prototype` of the Class.
-   * **Not** to be used on instances.
-   *
-   * The members in the hash map will become members with
-   * instances of the merged class.
-   *
-   * By default, this method will not override existing prototype members,
-   * unless the second argument `force` is true.
-   *
-   * @method mergePrototypes
-   * @param map {Object} Hash map of properties to add to the prototype of this object
-   * @param force {Boolean}  If true, existing members will be overwritten
-   * @chainable
-   */
-  mergePrototypes: function (map, force) {
-console.warn('START');
-    var instance = this,
-        proto = instance.prototype,
-        names = Object.keys(map || {}),
-      l = names.length,
-      i = -1,
-      name, nameInProto;
-    while (++i < l) {
-      name = names[i];
-console.warn('TRY '+name);
-      nameInProto = (name in proto);
-      if (!nameInProto || force) {
-console.warn('HANDLING '+name);
-        // if nameInProto: set the property, but also backup for chaining using $orig
-        if (typeof map[name] === 'function') {
-          proto[name] = (function (original, methodName) {
-            return function () {
-              instance.$orig[methodName] = original;
-              return map[methodName].apply(this, arguments);
+        _createElement: function(itagName, renderFn, properties, isParcel) {
+            var instance = this;
+            return function() {
+                var element = DOCUMENT._createElement(itagName);
+                instance._upgradeElement(element, renderFn, properties, isParcel);
+                return element;
             };
-          })(proto[name] || NOOP, name);
-        }
-        else {
-console.warn('setting '+name+' --> '+map[name]);
-            proto[name] = map[name];
-        }
-      }
-    }
-    return instance;
-  },
+        },
 
-  /**
-   * Returns a newly created class inheriting from this class
-   * using the given `constructor` with the
-   * prototypes listed in `prototypes` merged in.
-   *
-   *
-   * The newly created class has the `$super` static property
-   * available to access all of is ancestor's instance methods.
-   *
-   * Further methods can be added via the [mergePrototypes](#method_mergePrototypes).
-   *
-   * @example
-   *
-   *  var Circle = Shape.subClass(
-   *    function (x, y, r) {
-   *      this.r = r;
-   *      Circle.$super.constructor.call(this, x, y);
-   *    },
-   *    {
-   *      area: function () {
-   *        return this.r * this.r * Math.PI;
-   *      }
-   *    }
-   *  );
-   *
-   * @method subClass
-   * @param [constructor] {Function} The function that will serve as constructor for the new class.
-   *        If `undefined` defaults to `Object.constructor`
-   * @param [prototypes] {Object} Hash map of properties to be added to the prototype of the new class.
-   * @return the new class.
-   */
-    subClass: function (itagName, constructor, prototypes) {
-  console.warn('subclassing htmlelement');
-        var instance = this,
-            baseProt = instance.prototype || {},
-            previousDefinition = window.ITAGS[itagName],
-            rp, customElement;
-
-        if (previousDefinition) {
-            console.warn(itagName+' already exists and cannot be redefined');
-            return previousDefinition;
-        }
-
-        if ((arguments.length === 2) && (typeof constructor !== 'function')) {
-            prototypes = constructor;
-            constructor = null;
-        }
-
-        constructor = constructor || function (ancestor) {
-            return function () {
-              ancestor.apply(this, arguments);
-            };
-        }(instance);
-
-        rp = Object.create(baseProt);
-
-        constructor.prototype = rp;
-
-        rp.constructor = constructor;
-        constructor.$super = baseProt;
-        constructor.$orig = {};
-
-        Object.protectedProp(constructor, 'itagName', itagName);
-
-        constructor.mergePrototypes(prototypes, true);
-
-        customElement = function() {
-            var element = DOCUMENT._createElement(itagName);
-            // merge all properties of the constructor:
-            fullMerge(constructor, element);
+        _upgradeElement: function(element, renderFn, properties, isParcel) {
+            merge(properties, element);
+            if (isParcel) {
+                merge({renderCE: function() {
+console.info('look if parcel can be rendered');
+                    var vnode = element.vnode;
+                    if (vnode._data) {
+                        if (!vnode.ce_initialized) {
+                            if (typeof element._init==='function') {
+                                element._init();
+                            }
+                            else {
+                                Object.protectedProp(vnode, 'ce_initialized', true);
+                            }
+                            element.removeClass(CLASS_CE_HIDDEN_BEFORE_RENDER);
+                        }
+console.info('going to render parcel');
+                        renderFn.call(element);
+                    }
+                }}, element);
+            }
+            else {
+                merge({renderCE: renderFn}, element);
+            }
+            merge(Event.Listener, element);
             // render, but do this after the element is created:
             // in the next eventcycle:
-            async(function() {
-                constructor.call(element);
+            asyncSilent(function() {
+                (typeof element._init==='function') && element._init();
+                element.renderCE();
+                isParcel || element.removeClass(CLASS_CE_HIDDEN_BEFORE_RENDER);
+                element.hasClass('focussed') && focusManager(element);
             });
-            return element;
-        };
-        window.ITAGS[itagName.toUpperCase()] = customElement;
-        renderDomElements(itagName);
-        return constructor;
-    }
+        }
 
-});
-
-
+    };
 
     DOCUMENT._createElement = DOCUMENT.createElement;
     DOCUMENT.createElement = function(tag) {
-console.warn('createElement '+tag);
-        var ItagClass = window.ITAGS[tag];
+        var ItagClass = window.ITAGS[tag.toLowerCase()];
         if (ItagClass) {
-console.warn('create itag!');
             return new ItagClass();
         }
-console.warn('create native');
         return this._createElement(tag);
     };
 
-    window.ITAGS.ItagBase = ItagBase;
+    DOCUMENT.refreshParcels = function() {
+console.info('refreshParcels');
+        var list = this.getParcels(),
+            len = list.length,
+            i, parcel;
+        for (i=0; i<len; i++) {
+            parcel = list[i];
+            parcel.renderCE();
+            parcel.hasClass('focussed') && focusManager(parcel);
+        }
+    };
 
-    return ItagBase;
+    Event.after(
+        [ATTRIBUTE_CHANGED, ATTRIBUTE_INSERTED, ATTRIBUTE_REMOVED],
+        function(e) {
+console.info('itag changed attributes '+e.type);
+console.info(e.changed);
+            var element = e.target;
+            element.renderCE();
+            element.hasClass('focussed') && focusManager(element);
+        },
+        itagCore.itagFilter
+    );
+
+    Event.after(
+        NODE_REMOVED,
+        function(e) {
+console.info('itag removed');
+            var node = e.target;
+            (typeof node._destroy==='function') && node._destroy();
+            node.detachAll();
+        },
+        itagCore.itagFilter
+    );
+
+    Event.finalize(function(e) {
+        if (DELAYED_FINALIZE_EVENTS[e.type]) {
+            registerDelay || (registerDelay = laterSilent(function() {
+console.info('Event finalize multi');
+                DOCUMENT.refreshParcels();
+                registerDelay = null;
+            }, DELAYED_EVT_TIME));
+        }
+        else {
+console.info('Event finalize '+e.type);
+            DOCUMENT.refreshParcels();
+        }
+    });
+
+    // we patch the window timer functions in order to run `refreshParcels` afterwards:
+    window._setTimeout = window.setTimeout;
+    window._setInterval = window.setInterval;
+
+    window.setTimeout = function() {
+        var args = arguments;
+        args[0] = (function(originalFn) {
+            return function() {
+                console.info('setTimeout');
+                originalFn();
+                DOCUMENT.refreshParcels();
+            };
+        })(args[0]);
+        window._setTimeout.apply(this, arguments);
+    };
+
+    window.setInterval = function() {
+        var args = arguments;
+        args[0] = (function(originalFn) {
+            return function() {
+                originalFn();
+                DOCUMENT.refreshParcels();
+            };
+        })(args[0]);
+        window._setInterval.apply(this, arguments);
+    };
+
+    if (typeof window.setImmediate !== 'undefined') {
+        window._setImmediate = window.setImmediate;
+        window.setImmediate = function() {
+            var args = arguments;
+            args[0] = (function(originalFn) {
+                return function() {
+                    originalFn();
+                    DOCUMENT.refreshParcels();
+                };
+            })(args[0]);
+            window._setImmediate.apply(this, arguments);
+        };
+    }
+
+    Object.protectedProp(window, '_ItagCore', itagCore);
+
+    return itagCore;
 
 };
