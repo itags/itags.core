@@ -6,7 +6,7 @@
 
     var expect = require('chai').expect,
         DOCUMENT = window.document,
-        itagCore = require("../itags.core")(window);
+        itagCore = require("../itags.core")(window, true);
 
     // Shape - superclass
     //function Shape(x, y) {
@@ -25,7 +25,7 @@
                 init: function () {
                     // should only be set the firts time
                     // otherwise there is a bug: init shouldn't run twice
-                    if (this.x) {
+                    if (this.shapeinited) {
                         this.x = 'double init called';
                         this.y = 'double init called';
                     }
@@ -33,6 +33,7 @@
                         this.x = 10;
                         this.y = 20;
                     }
+                    this.shapeinited = true;
                 },
                 move: function (x, y) {
                     this.x += x;
@@ -42,7 +43,6 @@
                     this.bg = '#111';
                 },
                 destroy: function() {
-console.info('destroying shape');
                     // should only be runned once at removal node from the dom
                     // otherwise there is a bug: destroy shouldn't run twice
                     if (this.x===-1) {
@@ -59,7 +59,7 @@ console.info('destroying shape');
                 init: function () {
                     // should only be set the firts time
                     // otherwise there is a bug: init shouldn't run twice
-                    if (this.x) {
+                    if (this.circleinited) {
                         this.x = 'double init called';
                         this.r = 'double init called';
                     }
@@ -67,6 +67,7 @@ console.info('destroying shape');
                         this.x = 100;
                         this.r = 5;
                     }
+                    this.circleinited = true;
                 },
                 area: function () {
                     return this.r * this.r * Math.PI;
@@ -75,7 +76,6 @@ console.info('destroying shape');
                     this.bg = '#222';
                 },
                 destroy: function() {
-console.info('destroying circle');
                     // should only be runned once at removal node from the dom
                     // otherwise there is a bug: destroy shouldn't run twice
                     if (this.x===-11) {
@@ -95,7 +95,7 @@ console.info('destroying circle');
             var s = new IShape();
             DOCUMENT.body.append(s);
             s.initUI(); // should end into NOOP
-            s.$super.initUI(); // should end into NOOP
+            IShape.$super.initUI.call(s); // should end into NOOP
             it('Should be an instance of Shape and HTMLElement', function () {
                 expect(s).be.an.instanceof(window.HTMLElement);
             });
@@ -116,29 +116,32 @@ console.info('destroying circle');
             it('Destroy', function (done) {
                 s.remove();
                 setTimeout(function() {
-console.info('after timeout');
                     expect(s.x).be.equal(-1);
                     expect(s.y).be.equal(-2);
-                    // s.destroyUI(); // should end into NOOP
-                    // expect(s.x).be.equal(-1);
-                    // expect(s.y).be.equal(-2);
+                    s.destroyUI(); // should end into NOOP
+                    expect(s.x).be.equal(-1);
+                    expect(s.y).be.equal(-2);
                     done();
-                }, 1500);
+                }, 50);
             });
         });
+
         describe('i-circle', function () {
+            // var s = new IShape();
             var c = new ICircle();
             DOCUMENT.body.append(c);
             c.initUI(); // should end into NOOP
-            c.$super.initUI(); // should end into NOOP
-            it('should be instance of Shape, Circle and HTMLElement', function () {
+            ICircle.$super.initUI.call(c); // should end into NOOP
+
+            it('should be instance of HTMLElement', function () {
                 expect(c).be.an.instanceof(window.HTMLElement);
             });
             it('Should be located at 100,20 with radious 5', function () {
                 expect(c.x).be.equal(100);
-                expect(c.y).be.equal(20);
                 expect(c.r).be.equal(5);
+                expect(c.y).be.equal(20);
             });
+
             it('Method of the parent class', function () {
                 c.move(1, 2);
                 expect(c.x).be.equal(101);
@@ -152,27 +155,33 @@ console.info('after timeout');
                 c.setBG();
                 expect(c.bg).be.equal('#222');
             });
+
             it('overridden method at parentclass', function () {
-                ICircle.$super.setBG.apply(c);
+                ICircle.$super.setBG.call(c);
                 expect(c.bg).be.equal('#111');
             });
+
             it('Destroy cannot be called manually', function () {
                 c.destroyUI(); // should end into NOOP
-                c.$super.destroyUI(); // should end into NOOP
+                ICircle.$super.destroyUI.apply(c); // should end into NOOP
                 expect(c.x).be.equal(101);
                 expect(c.y).be.equal(22);
             });
-            it('Destroy', function () {
+            it('Destroy', function (done) {
                 c.remove();
-                expect(c.x).be.equal(-1);
-                expect(c.y).be.equal(-2);
-                expect(c.z).be.equal(-13);
-                c.destroyUI(); // should end into NOOP
-                c.$super.destroyUI(c); // should end into NOOP
-                expect(c.x).be.equal(-1);
-                expect(c.y).be.equal(-2);
-                expect(c.z).be.equal(-13);
+                setTimeout(function() {
+                    expect(c.x).be.equal(-1);
+                    expect(c.y).be.equal(-2);
+                    expect(c.r).be.equal(-13);
+                    c.destroyUI(); // should end into NOOP
+                    ICircle.$super.destroyUI.apply(c); // should end into NOOP
+                    expect(c.x).be.equal(-1);
+                    expect(c.y).be.equal(-2);
+                    expect(c.r).be.equal(-13);
+                    done();
+                }, 50);
             });
+
         });
 
         describe('Check inteference subItages', function () {
@@ -189,7 +198,7 @@ console.info('after timeout');
                         this.b = 13;
                     },
                     add: function (c) {
-                        B.$super.add.apply(this, c * 2);
+                        B.$super.add.call(this, c * 2);
                     }
                 }),
                 C = B.subItag('i-c', {
@@ -197,7 +206,7 @@ console.info('after timeout');
                         this.c = 113;
                     },
                     add: function (d) {
-                        C.$super.add.apply(this, d * 3);
+                        C.$super.add.call(this, d * 3);
                     }
                 });
             it ('one level', function () {
@@ -250,7 +259,7 @@ console.info('after timeout');
                 expect(c.a).eql(15);
             });
         });
-/*
+
         describe('mergePrototypes', function () {
             var obj = {a:1, b:2, c:3};
             it('new empty class', function () {
@@ -297,7 +306,7 @@ console.info('after timeout');
                     }
                 }).mergePrototypes({
                     whatever: function(v) {
-                        return ItagG.$orig.whatever.apply(this, v + 'c') + 'd';
+                        return ItagG.$orig.whatever.call(this, v + 'c') + 'd';
                     }
                 }, true);
                 var g = new ItagG();
@@ -311,23 +320,23 @@ console.info('after timeout');
                     }
                 }).mergePrototypes({
                     whatever: function (b) {
-                        return ItagH.$orig.whatever.apply(this, b) + 'b';
+                        return ItagH.$orig.whatever.call(this, b) + 'b';
                     }
                 }, true);
-                var ItagI = DOCUMENT.createItag('i-i', {
+                var ItagI = ItagH.subItag('i-i', {
                     whatever: function (c) {
-                        return ItagI.$super.whatever.apply(this, c) + 'c';
+                        return ItagI.$super.whatever.call(this, c) + 'c';
                     }
                 }).mergePrototypes({
                     whatever: function (d) {
-                        return ItagI.$orig.whatever.apply(this, d) + 'd';
+                        return ItagI.$orig.whatever.call(this, d) + 'd';
                     }
                 }, true);
 
                 var h = new ItagH();
-                expect(h.whatever('0')).eql('0abcd');
+                expect(h.whatever('0')).eql('0ab');
                 var i = new ItagI();
-                expect(i.whatever('1')).eql('1ab');
+                expect(i.whatever('1')).eql('1abcd');
             });
             it('Two level inheritance each with two plugins each', function () {
                 var ItagJ = DOCUMENT.createItag('i-j', {
@@ -336,37 +345,37 @@ console.info('after timeout');
                     }
                 }).mergePrototypes({
                     whatever: function (b) {
-                        return ItagJ.$orig.whatever.apply(this, b) + 'b';
+                        return ItagJ.$orig.whatever.call(this, b) + 'b';
                     }
                 }, true).mergePrototypes({
                     whatever: function (b) {
-                        return ItagJ.$orig.whatever.apply(this, b) + 'B';
+                        return ItagJ.$orig.whatever.call(this, b) + 'B';
                     }
                 }, true);
-                var ItagK = DOCUMENT.createItag('i-k', {
+                var ItagK = ItagJ.subItag('i-k', {
                     whatever: function (c) {
-                        return ItagK.$super.whatever.apply(this, c) + 'c';
+                        return ItagK.$super.whatever.call(this, c) + 'c';
                     }
                 }).mergePrototypes({
                     whatever: function (d) {
-                        return ItagK.$orig.whatever.apply(this, d) + 'd';
+                        return ItagK.$orig.whatever.call(this, d) + 'd';
                     }
                 }, true).mergePrototypes({
                     whatever: function (d) {
-                        return ItagK.$orig.whatever.apply(this, d) + 'D';
+                        return ItagK.$orig.whatever.call(this, d) + 'D';
                     }
                 }, true);
 
                 var j = new ItagJ();
-                expect(j.whatever('0')).eql('0abBcdD');
+                expect(j.whatever('0')).eql('0abB');
                 var k = new ItagK();
-                expect(k.whatever('1')).eql('1abB');
+                expect(k.whatever('1')).eql('1abBcdD');
             });
             it('orig present even if no original', function (){
                 var ItagL = DOCUMENT.createItag('i-l', {
                 }).mergePrototypes({
                     whatever: function (b) {
-                        return ItagL.$orig.whatever.apply(this, b) + 'b';
+                        return ItagL.$orig.whatever.call(this, b) + 'b';
                     }
                 }, true);
                 var l = new ItagL();
@@ -376,11 +385,11 @@ console.info('after timeout');
                 var ItagM = DOCUMENT.createItag('i-m', {
                 }).mergePrototypes({
                     whatever: function (b) {
-                        return ItagM.$orig.whatever.apply(this, b) + 'b';
+                        return ItagM.$orig.whatever.call(this, b) + 'b';
                     }
                 }, true).mergePrototypes({
                     whatever: function (b) {
-                        return ItagM.$orig.whatever.apply(this, b) + 'B';
+                        return ItagM.$orig.whatever.call(this, b) + 'B';
                     }
                 }, true);
                 var m = new ItagM();
@@ -394,7 +403,7 @@ console.info('after timeout');
                         return 'dummy1 returnvalue';
                     },
                     whatever: function (b) {
-                        return ItagN.$orig.whatever.apply(this, b) + 'b';
+                        return ItagN.$orig.whatever.call(this, b) + 'b';
                     },
                     dummy2: function() {
                         return 'dummy2 returnvalue';
@@ -407,7 +416,7 @@ console.info('after timeout');
                         return 'dummy4 returnvalue';
                     },
                     whatever: function (b) {
-                        return ItagN.$orig.whatever.apply(this, b) + 'B';
+                        return ItagN.$orig.whatever.call(this, b) + 'B';
                     },
                     dummy5: function() {
                         return 'dummy5 returnvalue';
@@ -424,11 +433,11 @@ console.info('after timeout');
                 var ItagO = DOCUMENT.createItag('i-o', {
                 }).mergePrototypes({
                     whatever: function (b) {
-                        return ItagO.$orig.whatever.apply(this, b) + 'b';
+                        return ItagO.$orig.whatever.call(this, b) + 'b';
                     }
                 }, true).mergePrototypes({
                     whatever: function (b) {
-                        return ItagO.$orig.whatever.apply(this, b) + 'B';
+                        return ItagO.$orig.whatever.call(this, b) + 'B';
                     }
                 }, true);
                 var o = new ItagO();
@@ -436,7 +445,7 @@ console.info('after timeout');
             });
 
         });
-*/
+
     });
 
 
@@ -454,7 +463,7 @@ console.info('after timeout');
                 init: function () {
                     // should only be set the firts time
                     // otherwise there is a bug: init shouldn't run twice
-                    if (this.x) {
+                    if (this.shapeinited) {
                         this.x = 'double init called';
                         this.y = 'double init called';
                     }
@@ -462,6 +471,7 @@ console.info('after timeout');
                         this.x = 10;
                         this.y = 20;
                     }
+                    this.shapeinited = true;
                 },
                 move: function (x, y) {
                     this.x += x;
@@ -487,7 +497,7 @@ console.info('after timeout');
                 init: function () {
                     // should only be set the firts time
                     // otherwise there is a bug: init shouldn't run twice
-                    if (this.x) {
+                    if (this.circleinited) {
                         this.x = 'double init called';
                         this.r = 'double init called';
                     }
@@ -495,6 +505,7 @@ console.info('after timeout');
                         this.x = 100;
                         this.r = 5;
                     }
+                    this.circleinited = true;
                 },
                 area: function () {
                     return this.r * this.r * Math.PI;
@@ -522,7 +533,7 @@ console.info('after timeout');
             var s = new IShape();
             DOCUMENT.body.append(s);
             s.initUI(); // should end into NOOP
-            s.$super.initUI(); // should end into NOOP
+            IShape.$super.initUI.call(s); // should end into NOOP
             it('Should be an instance of Shape and HTMLElement', function () {
                 expect(s).be.an.instanceof(window.HTMLElement);
             });
@@ -540,28 +551,35 @@ console.info('after timeout');
                 expect(s.x).be.equal(11);
                 expect(s.y).be.equal(22);
             });
-            it('Destroy', function () {
+            it('Destroy', function (done) {
                 s.remove();
-                expect(s.x).be.equal(-1);
-                expect(s.y).be.equal(-2);
-                s.destroyUI(); // should end into NOOP
-                expect(s.x).be.equal(-1);
-                expect(s.y).be.equal(-2);
+                setTimeout(function() {
+                    expect(s.x).be.equal(-1);
+                    expect(s.y).be.equal(-2);
+                    s.destroyUI(); // should end into NOOP
+                    expect(s.x).be.equal(-1);
+                    expect(s.y).be.equal(-2);
+                    done();
+                }, 50);
             });
         });
+
         describe('i-circle', function () {
+            // var s = new IShape();
             var c = new ICircle();
             DOCUMENT.body.append(c);
             c.initUI(); // should end into NOOP
-            c.$super.initUI(); // should end into NOOP
-            it('should be instance of Shape, Circle and HTMLElement', function () {
+            ICircle.$super.initUI.call(c); // should end into NOOP
+
+            it('should be instance of HTMLElement', function () {
                 expect(c).be.an.instanceof(window.HTMLElement);
             });
             it('Should be located at 100,20 with radious 5', function () {
                 expect(c.x).be.equal(100);
-                expect(c.y).be.equal(20);
                 expect(c.r).be.equal(5);
+                expect(c.y).be.equal(20);
             });
+
             it('Method of the parent class', function () {
                 c.move(1, 2);
                 expect(c.x).be.equal(101);
@@ -575,27 +593,33 @@ console.info('after timeout');
                 c.setBG();
                 expect(c.bg).be.equal('#222');
             });
+
             it('overridden method at parentclass', function () {
-                ICircle.$super.setBG.apply(c);
+                ICircle.$super.setBG.call(c);
                 expect(c.bg).be.equal('#111');
             });
+
             it('Destroy cannot be called manually', function () {
                 c.destroyUI(); // should end into NOOP
-                c.$super.destroyUI(); // should end into NOOP
+                ICircle.$super.destroyUI.apply(c); // should end into NOOP
                 expect(c.x).be.equal(101);
                 expect(c.y).be.equal(22);
             });
-            it('Destroy', function () {
+            it('Destroy', function (done) {
                 c.remove();
-                expect(c.x).be.equal(-1);
-                expect(c.y).be.equal(-2);
-                expect(c.z).be.equal(-13);
-                c.destroyUI(); // should end into NOOP
-                c.$super.destroyUI(); // should end into NOOP
-                expect(c.x).be.equal(-1);
-                expect(c.y).be.equal(-2);
-                expect(c.z).be.equal(-13);
+                setTimeout(function() {
+                    expect(c.x).be.equal(-1);
+                    expect(c.y).be.equal(-2);
+                    expect(c.r).be.equal(-13);
+                    c.destroyUI(); // should end into NOOP
+                    ICircle.$super.destroyUI.apply(c); // should end into NOOP
+                    expect(c.x).be.equal(-1);
+                    expect(c.y).be.equal(-2);
+                    expect(c.r).be.equal(-13);
+                    done();
+                }, 50);
             });
+
         });
 
         describe('Check inteference subItages', function () {
@@ -612,7 +636,7 @@ console.info('after timeout');
                         this.b = 13;
                     },
                     add: function (c) {
-                        B.$super.add.apply(this, c * 2);
+                        B.$super.add.call(this, c * 2);
                     }
                 }),
                 C = B.subItag('i-xc', {
@@ -620,7 +644,7 @@ console.info('after timeout');
                         this.c = 113;
                     },
                     add: function (d) {
-                        C.$super.add.apply(this, d * 3);
+                        C.$super.add.call(this, d * 3);
                     }
                 });
             it ('one level', function () {
@@ -673,7 +697,7 @@ console.info('after timeout');
                 expect(c.a).eql(15);
             });
         });
-/*
+
         describe('mergePrototypes', function () {
             var obj = {a:1, b:2, c:3};
             it('new empty class', function () {
@@ -720,7 +744,7 @@ console.info('after timeout');
                     }
                 }).mergePrototypes({
                     whatever: function(v) {
-                        return ItagG.$orig.whatever.apply(this, v + 'c') + 'd';
+                        return ItagG.$orig.whatever.call(this, v + 'c') + 'd';
                     }
                 }, true);
                 var g = new ItagG();
@@ -734,23 +758,23 @@ console.info('after timeout');
                     }
                 }).mergePrototypes({
                     whatever: function (b) {
-                        return ItagH.$orig.whatever.apply(this, b) + 'b';
+                        return ItagH.$orig.whatever.call(this, b) + 'b';
                     }
                 }, true);
-                var ItagI = DOCUMENT.createItag('i-xi', {
+                var ItagI = ItagH.subItag('i-xi', {
                     whatever: function (c) {
-                        return ItagI.$super.whatever.apply(this, c) + 'c';
+                        return ItagI.$super.whatever.call(this, c) + 'c';
                     }
                 }).mergePrototypes({
                     whatever: function (d) {
-                        return ItagI.$orig.whatever.apply(this, d) + 'd';
+                        return ItagI.$orig.whatever.call(this, d) + 'd';
                     }
                 }, true);
 
                 var h = new ItagH();
-                expect(h.whatever('0')).eql('0abcd');
+                expect(h.whatever('0')).eql('0ab');
                 var i = new ItagI();
-                expect(i.whatever('1')).eql('1ab');
+                expect(i.whatever('1')).eql('1abcd');
             });
             it('Two level inheritance each with two plugins each', function () {
                 var ItagJ = DOCUMENT.createItag('i-xj', {
@@ -759,37 +783,37 @@ console.info('after timeout');
                     }
                 }).mergePrototypes({
                     whatever: function (b) {
-                        return ItagJ.$orig.whatever.apply(this, b) + 'b';
+                        return ItagJ.$orig.whatever.call(this, b) + 'b';
                     }
                 }, true).mergePrototypes({
                     whatever: function (b) {
-                        return ItagJ.$orig.whatever.apply(this, b) + 'B';
+                        return ItagJ.$orig.whatever.call(this, b) + 'B';
                     }
                 }, true);
-                var ItagK = DOCUMENT.createItag('i-xk', {
+                var ItagK = ItagJ.subItag('i-xk', {
                     whatever: function (c) {
-                        return ItagK.$super.whatever.apply(this, c) + 'c';
+                        return ItagK.$super.whatever.call(this, c) + 'c';
                     }
                 }).mergePrototypes({
                     whatever: function (d) {
-                        return ItagK.$orig.whatever.apply(this, d) + 'd';
+                        return ItagK.$orig.whatever.call(this, d) + 'd';
                     }
                 }, true).mergePrototypes({
                     whatever: function (d) {
-                        return ItagK.$orig.whatever.apply(this, d) + 'D';
+                        return ItagK.$orig.whatever.call(this, d) + 'D';
                     }
                 }, true);
 
                 var j = new ItagJ();
-                expect(j.whatever('0')).eql('0abBcdD');
+                expect(j.whatever('0')).eql('0abB');
                 var k = new ItagK();
-                expect(k.whatever('1')).eql('1abB');
+                expect(k.whatever('1')).eql('1abBcdD');
             });
             it('orig present even if no original', function (){
                 var ItagL = DOCUMENT.createItag('i-xl', {
                 }).mergePrototypes({
                     whatever: function (b) {
-                        return ItagL.$orig.whatever.apply(this, b) + 'b';
+                        return ItagL.$orig.whatever.call(this, b) + 'b';
                     }
                 }, true);
                 var l = new ItagL();
@@ -799,11 +823,11 @@ console.info('after timeout');
                 var ItagM = DOCUMENT.createItag('i-xm', {
                 }).mergePrototypes({
                     whatever: function (b) {
-                        return ItagM.$orig.whatever.apply(this, b) + 'b';
+                        return ItagM.$orig.whatever.call(this, b) + 'b';
                     }
                 }, true).mergePrototypes({
                     whatever: function (b) {
-                        return ItagM.$orig.whatever.apply(this, b) + 'B';
+                        return ItagM.$orig.whatever.call(this, b) + 'B';
                     }
                 }, true);
                 var m = new ItagM();
@@ -817,7 +841,7 @@ console.info('after timeout');
                         return 'dummy1 returnvalue';
                     },
                     whatever: function (b) {
-                        return ItagN.$orig.whatever.apply(this, b) + 'b';
+                        return ItagN.$orig.whatever.call(this, b) + 'b';
                     },
                     dummy2: function() {
                         return 'dummy2 returnvalue';
@@ -830,7 +854,7 @@ console.info('after timeout');
                         return 'dummy4 returnvalue';
                     },
                     whatever: function (b) {
-                        return ItagN.$orig.whatever.apply(this, b) + 'B';
+                        return ItagN.$orig.whatever.call(this, b) + 'B';
                     },
                     dummy5: function() {
                         return 'dummy5 returnvalue';
@@ -847,11 +871,11 @@ console.info('after timeout');
                 var ItagO = DOCUMENT.createItag('i-xo', {
                 }).mergePrototypes({
                     whatever: function (b) {
-                        return ItagO.$orig.whatever.apply(this, b) + 'b';
+                        return ItagO.$orig.whatever.call(this, b) + 'b';
                     }
                 }, true).mergePrototypes({
                     whatever: function (b) {
-                        return ItagO.$orig.whatever.apply(this, b) + 'B';
+                        return ItagO.$orig.whatever.call(this, b) + 'B';
                     }
                 }, true);
                 var o = new ItagO();
@@ -859,7 +883,7 @@ console.info('after timeout');
             });
 
         });
-*/
+
     });
 
 }(global.window || require('node-win')));

@@ -40,19 +40,50 @@ var asyncSilent = require('utils').asyncSilent,
         'keypress': true
     },
     DELAYED_EVT_TIME = 1000,
-    ITAG_METHODS = {
-        init: '_initUI',
-        render: 'renderUI', // only one without leading underscore
-        destroy: '_destroyUI'
+    destroyItag = function(destroyFn, context) {
+        destroyFn.call(context);
+        context.$super.destroyUI && destroyItag(context.$super.destroyUI, context);
     },
     merge = function (sourceObj, targetObj) {
         var name;
         for (name in sourceObj) {
-            targetObj[ITAG_METHODS[name] || name] = sourceObj[name];
-        }
-    },
-    mergeFlat = function() {
+            if (name==='init') {
+/*jshint -W083 */
+                targetObj.initUI = function() {
+/*jshint +W083 */
+                    var vnode = this.vnode;
+                    if (!vnode.ce_initialized && !vnode.removedFromDOM && !vnode.ce_destroyed) {
+                        // sourceObj.init.call(targetObj);
+                        Object.protectedProp(vnode, 'ce_initialized', true);
+                        targetObj.constructor.$super.initUI();
+                        sourceObj.init.call(targetObj);
+                    }
+                };
+            }
+            else if (name==='destroy') {
+console.info('store destroy');
 
+/*jshint -W083 */
+                targetObj.destroyUI = function() {
+/*jshint +W083 */
+console.info('running destroyUI');
+                    var vnode = this.vnode;
+                        if (vnode.removedFromDOM && vnode.ce_initialized && !vnode.ce_destroyed) {
+console.info('REALYY running destroyUI');
+                        Object.protectedProp(vnode, 'ce_destroyed', true);
+                        sourceObj.destroy.call(targetObj);
+                        targetObj.constructor.$super.destoryUI();
+                    }
+                };
+            }
+            else if (name==='render') {
+/*jshint -W083 */
+                targetObj.renderUI = sourceObj.render;
+            }
+            else {
+                targetObj[name] = sourceObj[name];
+            }
+        }
     },
     NOOP = function() {},
     // Define configurable, writable and non-enumerable props
@@ -65,42 +96,20 @@ var asyncSilent = require('utils').asyncSilent,
             value: method
         });
     },
+    ITAG_METHODS = {
+        init: true,
+        render: true,
+        destroy: true
+    },
+    ITAG_SPECIAL_METHODS = {
+        init: true,
+        destroy: true
+    },
     DEFAULT_METHODS = {
-        initUI: function() {
-            var instance = this,
-                vnode = instance.vnode,
-                superInit;
-            if (!vnode.ce_initialized && !vnode.removedFromDOM && !vnode.ce_destroyed) {
-                superInit = function(obj) {
-                    if (obj.$proto) {
-                        superInit(obj.$proto);
-                    }
-                    // don't call `hasOwnProperty` directly on obj --> it might have been overruled
-                    Object.prototype.hasOwnProperty.call(obj, '_initUI') && obj._initUI.call(instance);
-                };
-                superInit(instance);
-                Object.protectedProp(vnode, 'ce_initialized', true);
-            }
-        },
-        _initUI: NOOP,
-        _destroyUI: NOOP,
+        initUI: NOOP,
         renderUI: NOOP,
         destroyUI: function() {
-            var instance = this,
-                vnode = instance.vnode,
-                superDestroy;
-            if (vnode.removedFromDOM && vnode.ce_initialized && !vnode.ce_destroyed) {
-                superDestroy = function(obj) {
-                    // don't call `hasOwnProperty` directly on obj --> it might have been overruled
-                    Object.prototype.hasOwnProperty.call(obj, '_destroyUI') && obj._destroyUI.call(instance);
-                    if (obj.$proto) {
-                        superDestroy(obj.$proto);
-                    }
-                };
-                instance.detachAll();
-                superDestroy(instance);
-                Object.protectedProp(vnode, 'ce_destroyed', true);
-            }
+            this.detachAll();
         }
     };
 
@@ -287,113 +296,134 @@ module.exports = function (window) {
     };
 
 
-
-
-
-    (function(FunctionPrototype) {
-        FunctionPrototype._mergePrototypes = FunctionPrototype.mergePrototypes;
-        FunctionPrototype.mergePrototypes = function(map, force) {
-            var instance = this;
-            if (!instance.subItag) {
-                return instance._mergePrototypes(map, force);
-            }
-            // now we set up a custom `mergePrototypes` for iTags:
-            var instance = this,
-                proto = instance.$proto,
-                names = Object.keys(map || {}),
-                l = names.length,
-                i = -1,
-                name, nameInProto, finalName;
-            while (++i < l) {
-                name = names[i];
-                nameInProto = (name in proto);
-                if (!DEFAULT_METHODS[name] && (!nameInProto || force)) {
-                    // if nameInProto: set the property, but also backup for chaining using $orig
-                    if (typeof map[name] === 'function') {
-                        finalName = ITAG_METHODS[name] || name;
-    /*jshint -W083 */
-                        proto[finalName] = (function (original, methodName, methodFinalName) {
-                            return function () {
-    /*jshint +W083 */
-                                instance.$orig[methodFinalName] = original;
+Function.prototype._mergePrototypes = Function.prototype.mergePrototypes;
+Function.prototype.mergePrototypes = function(map, force) {
+    var instance = this;
+    if (true) {
+//    if (instance.isItag && instance.isItag()) {
+        var proto = instance.prototype,
+            names = Object.keys(map || {}),
+            l = names.length,
+            i = -1,
+            name, nameInProto, newName;
+        while (++i < l) {
+            name = names[i];
+            nameInProto = (name in proto);
+            if (!nameInProto || force) {
+                // if nameInProto: set the property, but also backup for chaining using $orig
+                if (typeof map[name] === 'function') {
+                    newName = ITAG_METHODS[name] ? name+'UI' : name;
+/*jshint -W083 */
+                    proto[newName] = (function (original, methodName, newMethodName) {
+                        return function () {
+/*jshint +W083 */
+                            var vnode;
+                            if (!ITAG_SPECIAL_METHODS[methodName]) {
+                                instance.$orig[newMethodName] = original;
                                 return map[methodName].apply(this, arguments);
-                            };
-                        })(proto[name] || NOOP, name, finalName);
-                    }
-                    else {
-                        proto[name] = map[name];
-                    }
+                            }
+                            vnode = this.vnode;
+                            if (methodName==='init') {
+                                if (!vnode.ce_initialized && !vnode.removedFromDOM && !vnode.ce_destroyed) {
+                                    // sourceObj.init.call(targetObj);
+                                    Object.protectedProp(vnode, 'ce_initialized', true);
+                                    return map.init.apply(this, arguments);
+                                }
+
+                            }
+                            else if (methodName==='destroy') {
+console.info('calling destroy');
+                                if (vnode.removedFromDOM && vnode.ce_initialized && !vnode.ce_destroyed) {
+console.info('REALLY running destroyUI');
+                                    Object.protectedProp(vnode, 'ce_destroyed', true);
+                                    return map.destroy.apply(this, arguments);
+                                }
+                            }
+                        };
+                    })(proto[name] || NOOP, name, newName);
+                }
+                else {
+                    proto[name] = map[name];
                 }
             }
-            return instance;
         }
-    }(Function.prototype));
+        return instance;
+    }
+    else {
+        return instance.mergePrototypes(map, force);
+    }
+};
 
-
-
-    var SubItag = function(itagName, itagPrototypes) {
+    Object.protectedProp(Function.prototype, 'subItag', function(itagName, itagPrototypes) {
     console.info('subItag '+arguments.length);
         var instance = this,
-            parentProto, proto, domElementConstructor;
-
+            baseProt, ProtoConstructor, SuperConstructor, proto, rp, domElementConstructor;
         itagName = itagName.toLowerCase();
         if (window.ITAGS[itagName]) {
             console.warn(itagName+' already exists and cannot be redefined');
             return;
         }
 
-        if (instance.$proto) {
-            parentProto = instance.$proto;
-            proto = Object.create(parentProto);
+
+        if (instance.ProtoConstructor) {
+console.info('subclassing on instance.ProtoConstructor');
+            ProtoConstructor = instance.ProtoConstructor.subClass(null, itagPrototypes);
         }
         else {
-            parentProto = Object.create(window.HTMLElement.prototype);
-            parentProto.merge(DEFAULT_METHODS);
-            proto = Object.create(parentProto);
+console.info('subclassing on instance');
+            ProtoConstructor = instance.subClass(null, itagPrototypes);
         }
-        proto = Object.create(parentProto);
-
-        proto.$proto = parentProto;
 
         // merge some system function in case they don't exists
-        domElementConstructor = function() {
-            var domElement = DOCUMENT._createElement(itagName);
+        domElementConstructor = (function(itag) {
+            return function() {
+                var domElement = DOCUMENT._createElement(itag),
+                    nativeProto = domElement.__proto__,
+                    proto = new ProtoConstructor(),
+                    setTopLevelProto;
+console.warn(proto);
+                setTopLevelProto = function(obj) {
+                    if (!obj.__proto__) {
+                        return;
+                    }
+                    if (!obj.__proto__.__proto__) {
+                        if (!obj._topLevelProtoSet) {
+                            Object.protectedProp(obj, '_topLevelProtoSet', true);
+                            obj.__proto__ = nativeProto;
+                        }
+                    }
+                    else {
+                        setTopLevelProto(obj.__proto__);
+                    }
+                };
 
-            if (PROTO_SUPPORTED) {
-                domElement.__proto__ = proto;
-            }
-            else {
-                mergeFlat(itagPrototypes, domElement);
-            }
+                if (PROTO_SUPPORTED) {
+                    setTopLevelProto(proto);
+                    domElement.__proto__ = proto;
+                }
+                else {
+                    merge(proto, domElement);
+                }
+                domElement.initUI();
 
-            domElement.$proto = proto;
+                return domElement;
+            };
+        })(itagName);
 
-            domElement.initUI();
-            return domElement;
-        };
+        domElementConstructor.$super = ProtoConstructor.$super;
+        domElementConstructor.$orig = ProtoConstructor.$orig;
 
-        domElementConstructor.$super = parentProto;
-        domElementConstructor.$proto = proto;
-        domElementConstructor.$orig = {};
-        domElementConstructor.subItag = SubItag;
-
-        PROTO_SUPPORTED && domElementConstructor.mergePrototypes(itagPrototypes, true);
+        // to enable the right way of `subItagging`: we bind domElementConstructor:
+        domElementConstructor.ProtoConstructor = ProtoConstructor;
 
         window.ITAGS[itagName] = domElementConstructor;
         return domElementConstructor;
-    };
-
-
-
-
-
-
-
-
+    });
 
 
     Object.protectedProp(DOCUMENT, 'createItag', function (tagName, prototypes) {
-        return new SubItag(tagName, prototypes);
+        var BaseClass = Object.createClass(null, DEFAULT_METHODS);
+        return BaseClass.subItag(tagName, prototypes);
     });
 
     (function(HTMLElementPrototype) {
