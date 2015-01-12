@@ -1,7 +1,7 @@
 {
-    "name": "itags-core",
+    "name": "itags.core",
     "version": "0.0.1",
-    "description": "itags-core",
+    "description": "itags.core",
     "author": [
         {
             "name": "Marco Asbreuk",
@@ -10,10 +10,10 @@
     ],
     "repository": {
         "type": "git",
-        "url": "https://github.com/itags/itags-core"
+        "url": "https://github.com/itags/itags.core"
     },
     "bugs": {
-        "url": "https://github.com/itags/itags-core/issues"
+        "url": "https://github.com/itags/itags.core/issues"
     },
     "keywords": [
         "itags",
@@ -21,9 +21,12 @@
         "custom element",
         "custom",
         "element",
-        "itags-core"
+        "itags.core"
     ],
     "main": "itags.core.js",
+    "browserify": {
+        "transform": ["cssify"]
+    },
     "engines": {
         "node": "*"
     },

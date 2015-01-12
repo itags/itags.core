@@ -1,11 +1,9 @@
 
-/*jshint proto:true */
-
 "use strict";
 
 require('js-ext');
 require('polyfill/polyfill-base.js');
-require('./css/itags.core.css');
+require('./css/itags-core.css');
 
 var asyncSilent = require('utils').asyncSilent,
     laterSilent = require('utils').laterSilent,
@@ -40,60 +38,37 @@ var asyncSilent = require('utils').asyncSilent,
         'keypress': true
     },
     DELAYED_EVT_TIME = 1000,
-    destroyItag = function(destroyFn, context) {
-        destroyFn.call(context);
-        context.$super.destroyUI && destroyItag(context.$super.destroyUI, context);
-    },
     merge = function (sourceObj, targetObj) {
         var name;
         for (name in sourceObj) {
             if (name==='init') {
+console.info('store init function');
 /*jshint -W083 */
-                targetObj.initUI = function() {
+                targetObj._init = function() {
 /*jshint +W083 */
-                    var vnode = this.vnode;
+                    var vnode = targetObj.vnode;
                     if (!vnode.ce_initialized && !vnode.removedFromDOM) {
-                        // sourceObj.init.call(targetObj);
-                        Object.protectedProp(vnode, 'ce_initialized', true);
                         sourceObj.init.call(targetObj);
+                        Object.protectedProp(vnode, 'ce_initialized', true);
                     }
                 };
             }
             else if (name==='destroy') {
-console.info('store destroy');
-
 /*jshint -W083 */
-                targetObj.destroyUI = function() {
+                targetObj._destroy = function() {
 /*jshint +W083 */
-console.info('running destroyUI');
-                    var vnode = this.vnode;
+                    var vnode = targetObj.vnode;
                     if (!vnode.removedFromDOM && vnode.ce_initialized) {
-console.info('REALYY running destroyUI');
-                        destroyItag(sourceObj.destroy, targetObj);
+                        sourceObj.destroy.call(targetObj);
                     }
                 };
-            }
-            else if (name==='render') {
-/*jshint -W083 */
-                targetObj.renderUI = sourceObj.render;
             }
             else {
                 targetObj[name] = sourceObj[name];
             }
         }
     },
-    NOOP = function() {},
-    // Define configurable, writable and non-enumerable props
-    // if they don't exist.
-    defineUnErasableProperty = function (object, name, method) {
-        Object.defineProperty(object, name, {
-            configurable: true,
-            enumerable: false,
-            writable: true,
-            value: method
-        });
-    },
-    DEFAULT_METHODS = {};
+    NOOP = function() {};
 
 DELAYED_FINALIZE_EVENTS.keys().forEach(function(key) {
     DELAYED_FINALIZE_EVENTS[key+'outside'] = true;
@@ -102,10 +77,7 @@ DELAYED_FINALIZE_EVENTS.keys().forEach(function(key) {
 module.exports = function (window) {
 
     var DOCUMENT = window.document,
-        PROTOTYPE_CHAIN_CAN_BE_SET = arguments[1], // hidden feature, used by unit-test
         RUNNING_ON_NODE = (typeof global !== 'undefined') && (global.window!==window),
-        PROTO_SUPPORTED = !!Object.__proto__,
-        dummyTag = DOCUMENT.createElement('div'),
         itagCore, MUTATION_EVENTS, Event, registerDelay, focusManager;
 
     require('vdom')(window);
@@ -118,12 +90,6 @@ module.exports = function (window) {
     }
 
     Object.protectedProp(window, 'ITAGS', {});
-
-    DEFAULT_METHODS = Object.create(dummyTag.__proto__);
-    Object.protectedProp(DEFAULT_METHODS, '_isItag', true);
-    defineUnErasableProperty(DEFAULT_METHODS, 'initUI', NOOP);
-    defineUnErasableProperty(DEFAULT_METHODS, 'renderUI', NOOP);
-    defineUnErasableProperty(DEFAULT_METHODS, 'destroyUI', NOOP);
 
     MUTATION_EVENTS = [NODE_REMOVED, NODE_INSERTED, NODE_CONTENT_CHANGE, ATTRIBUTE_REMOVED, ATTRIBUTE_CHANGED, ATTRIBUTE_INSERTED];
 
@@ -138,7 +104,7 @@ module.exports = function (window) {
             return !!e.target._updateUI;
         },
 
-        _renderDomElements: function(tagName, updateFn, properties, isParcel) {
+        renderDomElements: function(tagName, updateFn, properties, isParcel) {
             var itagElements = DOCUMENT.getAll(tagName),
                 len = itagElements.length,
                 i, itagElement;
@@ -177,12 +143,14 @@ module.exports = function (window) {
 
         _defineElement: function(itagName, updateFn, properties, isParcel) {
             itagName = itagName.toLowerCase();
+/*jshint boss:true */
             if (window.ITAGS[itagName]) {
+/*jshint boss:false */
                 console.warn(itagName+' already exists and cannot be redefined');
                 return;
             }
             (typeof updateFn === 'function') || (updateFn=NOOP);
-            this._renderDomElements(itagName, updateFn, properties, isParcel);
+            this.renderDomElements(itagName, updateFn, properties, isParcel);
             window.ITAGS[itagName] = this._createElement(itagName, updateFn, properties, isParcel);
         },
 
@@ -199,6 +167,7 @@ module.exports = function (window) {
             merge(properties, element);
             merge({
                 _updateUI: isParcel ? function() {
+console.info('look if parcel can be rendered');
                         var vnode = element.vnode;
                         if (vnode._data) {
                             if (!vnode.ce_initialized) {
@@ -210,6 +179,7 @@ module.exports = function (window) {
                                 }
                                 element._setRendered();
                             }
+    console.info('going to render parcel');
                             updateFn.call(element);
                         }
                     } : updateFn,
@@ -274,91 +244,31 @@ module.exports = function (window) {
 
     };
 
-    DOCUMENT._createElement = DOCUMENT.createElement;
-    DOCUMENT.createElement = function(tag) {
-        var ItagClass = window.ITAGS[tag.toLowerCase()];
-        if (ItagClass) {
-console.warn('return custom element '+tag);
-            return new ItagClass();
-        }
-console.warn('return native element '+tag);
-        return this._createElement(tag);
-    };
-
-    Object.protectedProp(Function.prototype, 'subItag', function(itagName, itagPrototypes) {
-    console.info('subItag '+arguments.length);
-        var instance = this,
-            baseProt, constructor, proto, rp, domElementConstructor;
-        itagName = itagName.toLowerCase();
-        if (window.ITAGS[itagName]) {
-            console.warn(itagName+' already exists and cannot be redefined');
-            return;
-        }
-/*
-        constructor = {};
-
-        baseProt = instance.prototype || DEFAULT_METHODS;
-        rp = Object.create(baseProt);
-        constructor.prototype = rp;
-
-        rp.constructor = constructor;
-        constructor.$super = baseProt;
-        constructor.$orig = {};
-*/
-        baseProt = DEFAULT_METHODS;
-        proto = Object.create(baseProt);
-
-
-        proto.$super = baseProt;
-        proto.$orig = {};
-        merge(itagPrototypes, proto);
-
-        // merge some system function in case they don't exists
-        domElementConstructor = function() {
-            var domElement = DOCUMENT._createElement('i-tabpane'),
-                nativeProto;
-            if (PROTO_SUPPORTED) {
-    console.warn('Object.__proto__ is available --> redefine prototypechain');
-                nativeProto = domElement.__proto__;
-                domElement.__proto__ = proto;
-            }
-            else {
-                merge(proto, domElement);
-            }
-            domElement.initUI();
-            return domElement;
-        };
-
-        window.ITAGS[itagName] = domElementConstructor;
-        return domElementConstructor;
-    });
-
-    Object.protectedProp(DOCUMENT, 'createItag', function () {
-        return Function.prototype.subItag.apply({}, arguments);
-    });
-
     (function(HTMLElementPrototype) {
-        HTMLElementPrototype.isItag = function() {
-            return !!this._isItag;
-        };
         HTMLElementPrototype.itagReady = function() {
             var instance = this;
-            if (!instance.isItag()) {
-                console.warn('itagReady() invoked on a non-itag element');
-                return window.Promise.reject('Element is no itag');
-            }
             instance._itagReady || (instance._itagReady=window.Promise.manage());
             return instance._itagReady;
         };
     }(window.HTMLElement.prototype));
 
+    DOCUMENT._createElement = DOCUMENT.createElement;
+    DOCUMENT.createElement = function(tag) {
+        var ItagClass = window.ITAGS[tag.toLowerCase()];
+        if (ItagClass) {
+            return new ItagClass();
+        }
+        return this._createElement(tag);
+    };
+
     DOCUMENT.refreshParcels = function() {
+console.info('refreshParcels');
         var list = this.getParcels(),
             len = list.length,
             i, parcel;
         for (i=0; i<len; i++) {
             parcel = list[i];
-            parcel.renderUI();
+            parcel._updateUI();
             parcel.hasClass('focussed') && focusManager(parcel);
         }
     };
@@ -366,8 +276,10 @@ console.warn('return native element '+tag);
     Event.after(
         [ATTRIBUTE_CHANGED, ATTRIBUTE_INSERTED, ATTRIBUTE_REMOVED],
         function(e) {
+console.info('itag changed attributes '+e.type);
+console.info(e.changed);
             var element = e.target;
-            element.renderUI();
+            element._updateUI();
             element.hasClass('focussed') && focusManager(element);
         },
         itagCore.itagFilter
@@ -376,8 +288,9 @@ console.warn('return native element '+tag);
     Event.after(
         NODE_REMOVED,
         function(e) {
+console.info('itag removed');
             var node = e.target;
-            (typeof node.destroyUI==='function') && node.destroyUI();
+            (typeof node._destroy==='function') && node._destroy();
             node.detachAll();
         },
         itagCore.itagFilter
@@ -386,11 +299,13 @@ console.warn('return native element '+tag);
     Event.finalize(function(e) {
         if (DELAYED_FINALIZE_EVENTS[e.type]) {
             registerDelay || (registerDelay = laterSilent(function() {
+console.info('Event finalize multi');
                 DOCUMENT.refreshParcels();
                 registerDelay = null;
             }, DELAYED_EVT_TIME));
         }
         else {
+console.info('Event finalize '+e.type);
             DOCUMENT.refreshParcels();
         }
     });
@@ -437,12 +352,6 @@ console.warn('return native element '+tag);
     }
 
     Object.protectedProp(window, '_ItagCore', itagCore);
-
-    if (PROTOTYPE_CHAIN_CAN_BE_SET) {
-        itagCore.setPrototypeChain = function(activate) {
-            PROTO_SUPPORTED = activate ? !!Object.__proto__ : false;
-        };
-    }
 
     return itagCore;
 
