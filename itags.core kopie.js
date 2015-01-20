@@ -3,17 +3,13 @@
 
 "use strict";
 
+require('js-ext');
 require('polyfill/polyfill-base.js');
 require('./css/itags.core.css');
 
-var jsExt = require('js-ext/js-ext.js'), // want the full version: include it at the top, so that object.merge is available
-    createHashMap = require('js-ext/extra/hashmap.js').createMap,
-    asyncSilent = require('utils').asyncSilent,
+var asyncSilent = require('utils').asyncSilent,
     laterSilent = require('utils').laterSilent,
     CLASS_ITAG_RENDERED = 'itag-rendered',
-    DEFAULT_CHAIN_INIT = true,
-    DEFAULT_CHAIN_DESTROY = true,
-    Classes = jsExt.Classes,
     NODE = 'node',
     REMOVE = 'remove',
     INSERT = 'insert',
@@ -44,17 +40,11 @@ var jsExt = require('js-ext/js-ext.js'), // want the full version: include it at
         'keypress': true
     },
     DELAYED_EVT_TIME = 1000,
-    ITAG_METHODS = createHashMap({
+    ITAG_METHODS = {
         init: '_initUI',
         render: 'renderUI', // only one without leading underscore
         destroy: '_destroyUI'
-    }),
-    // ITAG_METHOD_VALUES must match previous ITAG_METHODS's values!
-    ITAG_METHOD_VALUES = createHashMap({
-        _initUI: true,
-        renderUI: true, // only one without leading underscore
-        _destroyUI: true
-    }),
+    },
     merge = function (sourceObj, targetObj) {
         var name;
         for (name in sourceObj) {
@@ -72,49 +62,47 @@ var jsExt = require('js-ext/js-ext.js'), // want the full version: include it at
             value: method
         });
     },
-    EXTRA_BASE_MEMBERS = {
-        initUI: function(constructor) {
+    PROTECTED_CLASS_METHODS = {
+        initUI: function() {
             var instance = this,
                 vnode = instance.vnode,
                 superInit;
             if (!vnode.ce_initialized && !vnode.removedFromDOM && !vnode.ce_destroyed) {
-                superInit = function(constructor) {
-                    var classCarierBKP = instance.__classCarier__;
-                    if (constructor.$$chainInited) {
-                        instance.__classCarier__ = constructor.$$super.constructor;
-                        superInit(constructor.$$super.constructor);
+                superInit = function(obj) {
+                    if (obj.$proto) {
+                        superInit(obj.$proto);
                     }
-                    classCarierBKP = instance.__classCarier__;
                     // don't call `hasOwnProperty` directly on obj --> it might have been overruled
-                    Object.prototype.hasOwnProperty.call(constructor.prototype, '_initUI') && constructor.prototype._initUI.call(instance);
+                    Object.prototype.hasOwnProperty.call(obj, '_initUI') && obj._initUI.call(instance);
                 };
-                superInit(constructor || instance.constructor);
+                superInit(instance);
                 Object.protectedProp(vnode, 'ce_initialized', true);
-            }
-        },
-        destroyUI: function(constructor) {
-            var instance = this,
-                vnode = instance.vnode,
-                superDestroy;
-            if (vnode.ce_initialized && vnode.removedFromDOM && !vnode.ce_destroyed) {
-                superDestroy = function(constructor) {
-                    var classCarierBKP = instance.__classCarier__;
-                    // don't call `hasOwnProperty` directly on obj --> it might have been overruled
-                    Object.prototype.hasOwnProperty.call(constructor.prototype, '_destroyUI') && constructor.prototype._destroyUI.call(instance);
-                    if (constructor.$$chainDestroyed) {
-                        instance.__classCarier__ = constructor.$$super.constructor;
-                        superDestroy(constructor.$$super.constructor);
-                    }
-                    classCarierBKP = instance.__classCarier__;
-                };
-                superDestroy(constructor || instance.constructor);
-                instance.detachAll();
-                Object.protectedProp(vnode, 'ce_destroyed', true);
             }
         },
         _initUI: NOOP,
         _destroyUI: NOOP,
-        renderUI: NOOP
+        renderUI: NOOP,
+        _isItag: true,
+        destroyUI: function() {
+
+            var instance = this,
+                vnode = instance.vnode,
+                superDestroy;
+            if (vnode.removedFromDOM && vnode.ce_initialized && !vnode.ce_destroyed) {
+                superDestroy = function(obj) {
+                    // don't call `hasOwnProperty` directly on obj --> it might have been overruled
+console.info(obj);
+                    Object.prototype.hasOwnProperty.call(obj, '_destroyUI') && obj._destroyUI.call(instance);
+                    if (obj.$proto) {
+                        superDestroy(obj.$proto);
+                    }
+                };
+                instance.detachAll();
+console.info('destroying');
+                superDestroy(instance);
+                Object.protectedProp(vnode, 'ce_destroyed', true);
+            }
+        }
     };
 
 DELAYED_FINALIZE_EVENTS.keys().forEach(function(key) {
@@ -127,7 +115,7 @@ module.exports = function (window) {
         PROTOTYPE_CHAIN_CAN_BE_SET = arguments[1], // hidden feature, used by unit-test
         RUNNING_ON_NODE = (typeof global !== 'undefined') && (global.window!==window),
         PROTO_SUPPORTED = !!Object.__proto__,
-        itagCore, MUTATION_EVENTS, PROTECTED_MEMBERS, Event, registerDelay, focusManager, basePrototypeNewCE, mergeFlat;
+        itagCore, MUTATION_EVENTS, Event, registerDelay, focusManager, mergeFlat;
 
     require('vdom')(window);
     Event = require('event-dom')(window);
@@ -139,38 +127,14 @@ module.exports = function (window) {
     }
 
     Object.protectedProp(window, 'ITAGS', {}); // for the ProtoConstructors
-    EXTRA_BASE_MEMBERS.merge(Event.Listener)
-                      .merge(Event._CE_listener);
-
-    PROTECTED_MEMBERS = createHashMap();
-    EXTRA_BASE_MEMBERS.each(function(value, key) {
-        ITAG_METHOD_VALUES[key] || (PROTECTED_MEMBERS[key] = true);
-    });
+    PROTECTED_CLASS_METHODS.merge(Event.Listener);
 
     MUTATION_EVENTS = [NODE_REMOVED, NODE_INSERTED, NODE_CONTENT_CHANGE, ATTRIBUTE_REMOVED, ATTRIBUTE_CHANGED, ATTRIBUTE_INSERTED];
 
-    mergeFlat = function(constructor, domElement) {
-        var prototype = constructor.prototype,
-            keys, i, name;
-        if (domElement.__addedProps__) {
-            // set before: erase previous properties
-            domElement.__addedProps__.each(function(value, key) {
-                if (key!=='$super') {
-                    delete domElement[key];
-                }
-            });
-        }
-        domElement.__addedProps__ = {};
-        while (prototype !== window.HTMLElement.prototype) {
-            keys = Object.getOwnPropertyNames(prototype);
-            for (i=0; name=keys[i]; i++) {
-                if (!domElement.__addedProps__[name]) {
-                    Object.defineProperty(domElement, name, Object.getOwnPropertyDescriptor(prototype, name));
-                    domElement.__addedProps__[name] = true;
-                }
-            }
-            constructor = constructor.$$super.constructor;
-            prototype = constructor.prototype;
+    mergeFlat = function(proto, domElement) {
+        if (proto !== window.HTMLElement.prototype) {
+            domElement.merge(proto.constructor);
+            mergeFlat(proto.constructor.$$super.constructor, domElement);
         }
     };
 
@@ -182,7 +146,7 @@ module.exports = function (window) {
     itagCore = {
 
         itagFilter: function(e) {
-            return !!e.target.getTagName().startsWith('I-');
+            return !!e.target._isItag;
         },
 
         _renderDomElements: function(tagName, updateFn, properties, isParcel) {
@@ -331,6 +295,9 @@ module.exports = function (window) {
     };
 
 
+
+
+
     (function(FunctionPrototype) {
         var originalSubClass = FunctionPrototype.subClass;
 
@@ -339,79 +306,64 @@ module.exports = function (window) {
             var instance = this;
             if (!instance.isItag) {
                 // default mergePrototypes
-                instance._mergePrototypes.apply(instance, arguments);
+                instance._mergePrototypes(map, force);
             }
             else {
-                instance._mergePrototypes(map, force, ITAG_METHODS, PROTECTED_MEMBERS);
+                instance._mergePrototypes(map, force, ITAG_METHODS, PROTECTED_CLASS_METHODS);
                 Event.emit(instance, 'itag:prototypechanged', {map: map, force: force});
             }
             return instance;
         };
 
-        FunctionPrototype._removePrototypes = FunctionPrototype.removePrototypes;
-        FunctionPrototype.removePrototypes = function(properties) {
-            var instance = this;
-            instance._removePrototypes.apply(instance, arguments);
-            instance.isItag && Event.emit(instance, 'itag:prototyperemoved', {properties: properties});
-            return instance;
-        };
-
-        FunctionPrototype.subClass = function(constructor, prototypes, chainInit, chainDestroy) {
+        FunctionPrototype.subClass = function(constructor, prototypes) {
             var instance = this,
                 baseProt, proto, domElementConstructor, itagName;
+console.warn('subClass');
             if (typeof constructor === 'string') {
+console.warn('fase 1 '+constructor);
                 // Itag subclassing
-                if (typeof prototypes === 'boolean') {
-                    chainDestroy = chainInit;
-                    chainInit = prototypes;
-                    prototypes = null;
-                }
-                (typeof chainInit === 'boolean') || (chainInit=DEFAULT_CHAIN_INIT);
-                (typeof chainDestroy === 'boolean') || (chainDestroy=DEFAULT_CHAIN_DESTROY);
 
                 itagName = constructor.toLowerCase();
                 if (window.ITAGS[itagName]) {
                     console.warn(itagName+' already exists: it will be redefined');
                 }
 
-                // if instance.isItag, then we subclass an existing i-tag
-                baseProt = instance.prototype;
+                if (instance.isItag) {
+                    // subclassing an existing i-tag
+                    baseProt = instance.prototype;
+                }
+                else {
+                    baseProt = Object.create(window.HTMLElement.prototype);
+                    baseProt.merge(PROTECTED_CLASS_METHODS, {descriptors: true});
+                }
                 proto = Object.create(baseProt);
 
                 // merge some system function in case they don't exists
                 domElementConstructor = function() {
                     var domElement = DOCUMENT._createElement(itagName);
                     if (!PROTO_SUPPORTED) {
-                        mergeFlat(domElementConstructor, domElement);
-                        domElement.__proto__ = proto;
-                        domElement.__classCarier__ = domElementConstructor;
-                        domElement.initUI(domElementConstructor);
-                        domElement.after(['itag:prototypechanged', 'itag:prototyperemoved'], function() {
-                            mergeFlat(domElementConstructor, domElement);
-                        });
+                        mergeFlat(proto, domElement);
                     }
                     else {
                         domElement.__proto__ = proto;
-                        domElement.__classCarier__ = domElementConstructor;
-                        domElement.initUI();
                     }
+                    domElement.initUI();
                     return domElement;
                 };
 
-                domElementConstructor.prototype = proto;
-
                 proto.constructor = domElementConstructor;
-                domElementConstructor.$$chainInited = chainInit ? true : false;
-                domElementConstructor.$$chainDestroyed = chainDestroy ? true : false;
+                domElementConstructor.prototype = proto;
                 domElementConstructor.$$super = baseProt;
                 domElementConstructor.$$orig = {};
                 Object.protectedProp(domElementConstructor, 'isItag', true); // so that `mergePrototype` can identify
 
-                prototypes && domElementConstructor.mergePrototypes(prototypes, true);
+                PROTO_SUPPORTED && domElementConstructor.mergePrototypes(prototypes, true);
+
                 window.ITAGS[itagName] = domElementConstructor;
                 return domElementConstructor;
             }
             else {
+console.warn('fase 2 ');
                 // Function subclassing
                 return originalSubClass.apply(instance, arguments);
             }
@@ -421,83 +373,18 @@ module.exports = function (window) {
 
 
 
-    var createItagBaseClass = function () {
-        return Function.prototype.subClass.apply(window.HTMLElement);
-    };
 
-    /**
-     * Returns a base class with the given constructor and prototype methods
-     *
-     * @for Object
-     * @method createClass
-     * @param [constructor] {Function} constructor for the class
-     * @param [prototype] {Object} Hash map of prototype members of the new class
-     * @static
-     * @return {Function} the new class
-    */
-    Object.protectedProp(Classes, 'ItagBaseClass', createItagBaseClass().mergePrototypes(EXTRA_BASE_MEMBERS, true, {}, {}));
 
-    // because `mergePrototypes` cannot merge object-getters, we will add the getter `$super` manually:
-    Object.defineProperties(Classes.ItagBaseClass.prototype, Classes.coreMethods);
 
-    Object.defineProperty(Classes.ItagBaseClass.prototype, '$superProp', {
-        value: function(/* func, *args */) {
-            var instance = this,
-                classCarierReturn = instance.__$superCarierStart__ || instance.__classCarier__ || instance.__methodClassCarier__,
-                currentClassCarier = instance.__classCarier__ || instance.__methodClassCarier__,
-                args = arguments,
-                superClass, superPrototype, firstArg, returnValue;
 
-            instance.__$superCarierStart__ = null;
-            if (args.length === 0) {
-                instance.__classCarier__ = classCarierReturn;
-                return;
-            }
 
-            superClass = currentClassCarier.$$super.constructor,
-            superPrototype = superClass.prototype,
-            firstArg = Array.prototype.shift.apply(args); // will decrease the length of args with one
-            firstArg = ITAG_METHODS[firstArg] || firstArg;
-            (firstArg === '_initUI') && (firstArg='initUI'); // to re-initiate chaining
-            (firstArg === '_destroyUI') && (firstArg='destroyUI'); // to re-initiate chaining
-            if ((firstArg==='initUI') && currentClassCarier.$$chainInited) {
-                console.warn('init cannot be invoked manually, because the Class is `chainInited`');
-                return currentClassCarier;
-            }
 
-            if ((firstArg==='destroyUI') && currentClassCarier.$$chainDestroyed) {
-                console.warn('destroy cannot be invoked manually, because the Class is `chainDestroyed`');
-                return currentClassCarier;
-            }
 
-            if (typeof superPrototype[firstArg] === 'function') {
-                instance.__classCarier__ = superClass;
-                if ((firstArg==='initUI') || (firstArg==='destroyUI')) {
-                    returnValue = superPrototype[firstArg].call(instance, instance.__classCarier__);
-                }
-                else {
-                    returnValue = superPrototype[firstArg].apply(instance, args);
-                }
-            }
-            instance.__classCarier__ = classCarierReturn;
-            return returnValue || superPrototype[firstArg];
-        }
+    Object.protectedProp(DOCUMENT, 'createItag', function (tagName, prototypes) {
+console.warn('createItag');
+console.warn(Function.prototype.subClass);
+        return Function.prototype.subClass.apply(null, arguments);
     });
-
-    /**
-     * Returns a base class with the given constructor and prototype methods
-     *
-     * @for Object
-     * @method createClass
-     * @param [constructor] {Function} constructor for the class
-     * @param [prototype] {Object} Hash map of prototype members of the new class
-     * @static
-     * @return {Function} the new class
-    */
-    Object.protectedProp(DOCUMENT, 'createItag', Classes.ItagBaseClass.subClass.bind(Classes.ItagBaseClass));
-
-
-
 
     (function(HTMLElementPrototype) {
         HTMLElementPrototype.isItag = function() {
@@ -539,7 +426,9 @@ module.exports = function (window) {
         NODE_REMOVED,
         function(e) {
             var node = e.target;
-            (typeof node.destroyUI==='function') && node.destroyUI(PROTO_SUPPORTED ? null : node.__proto__.constructor);
+console.info('NODE IS REMOVED');
+            (typeof node.destroyUI==='function') && node.destroyUI();
+            node.detachAll();
         },
         itagCore.itagFilter
     );
@@ -564,6 +453,7 @@ module.exports = function (window) {
         var args = arguments;
         args[0] = (function(originalFn) {
             return function() {
+                console.info('setTimeout');
                 originalFn();
                 DOCUMENT.refreshParcels();
             };
