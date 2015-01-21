@@ -1628,3 +1628,537 @@ describe('remove prototypes', function () {
     });
 
 });
+
+
+describe('changing constructor', function() {
+
+    it('Single level', function () {
+        var A = Classes.createClass(function(x) {
+            this.x = x;
+        });
+        var a1 = new A(1);
+        expect(a1.x).to.be.equal(1);
+        A.setConstructor(function(x) {
+            this.x = 3*x;
+        });
+        var a2 = new A(1);
+        expect(a2.x).to.be.equal(3);
+    });
+
+    it('Multiple levels (2) changing second', function () {
+        var A = Classes.createClass(function(x) {
+            this.x = x;
+        });
+        var B = A.subClass(function(x, y) {
+            this.y = y;
+        });
+        var b1 = new B(1,2);
+        expect(b1.x).to.be.equal(1);
+        expect(b1.y).to.be.equal(2);
+        B.setConstructor(function(x, y) {
+            this.y = 3*y;
+        });
+        var b2 = new B(1,2);
+        expect(b2.x).to.be.equal(1);
+        expect(b2.y).to.be.equal(6);
+    });
+
+    it('Multiple levels (2) changing first', function () {
+        var A = Classes.createClass(function(x) {
+            this.x = x;
+        });
+        var B = A.subClass(function(x, y) {
+            this.y = y;
+        });
+        var b1 = new B(1,2);
+        expect(b1.x).to.be.equal(1);
+        expect(b1.y).to.be.equal(2);
+        A.setConstructor(function(x) {
+            this.x = 3*x;
+        });
+        var b2 = new B(1,2);
+        expect(b2.x).to.be.equal(3);
+        expect(b2.y).to.be.equal(2);
+    });
+
+    it('Multiple levels (2) changing both', function () {
+        var A = Classes.createClass(function(x) {
+            this.x = x;
+        });
+        var B = A.subClass(function(x, y) {
+            this.y = y;
+        });
+        var b1 = new B(1,2);
+        expect(b1.x).to.be.equal(1);
+        expect(b1.y).to.be.equal(2);
+        A.setConstructor(function(x) {
+            this.x = 3*x;
+        });
+        B.setConstructor(function(x, y) {
+            this.y = 4*y;
+        });
+        var b2 = new B(1,2);
+        expect(b2.x).to.be.equal(3);
+        expect(b2.y).to.be.equal(8);
+    });
+
+    it('Multiple levels (3) changing first', function () {
+        var A = Classes.createClass(function(x) {
+            this.x = x;
+        });
+        var B = A.subClass(function(x, y) {
+            this.y = y;
+        });
+        var C = B.subClass(function(x, y, z) {
+            this.z = z;
+        });
+        var c1 = new C(1,2,3);
+        expect(c1.x).to.be.equal(1);
+        expect(c1.y).to.be.equal(2);
+        expect(c1.z).to.be.equal(3);
+        A.setConstructor(function(x) {
+            this.x = 10*x;
+        });
+        var c2 = new C(1,2,3);
+        expect(c2.x).to.be.equal(10);
+        expect(c2.y).to.be.equal(2);
+        expect(c2.z).to.be.equal(3);
+    });
+
+    it('Multiple levels (3) changing second', function () {
+        var A = Classes.createClass(function(x) {
+            this.x = x;
+        });
+        var B = A.subClass(function(x, y) {
+            this.y = y;
+        });
+        var C = B.subClass(function(x, y, z) {
+            this.z = z;
+        });
+        var c1 = new C(1,2,3);
+        expect(c1.x).to.be.equal(1);
+        expect(c1.y).to.be.equal(2);
+        expect(c1.z).to.be.equal(3);
+        B.setConstructor(function(x, y) {
+            this.y = 20*y;
+        });
+        var c2 = new C(1,2,3);
+        expect(c2.x).to.be.equal(1);
+        expect(c2.y).to.be.equal(40);
+        expect(c2.z).to.be.equal(3);
+    });
+
+    it('Multiple levels (3) changing firth', function () {
+        var A = Classes.createClass(function(x) {
+            this.x = x;
+        });
+        var B = A.subClass(function(x, y) {
+            this.y = y;
+        });
+        var C = B.subClass(function(x, y, z) {
+            this.z = z;
+        });
+        var c1 = new C(1,2,3);
+        expect(c1.x).to.be.equal(1);
+        expect(c1.y).to.be.equal(2);
+        expect(c1.z).to.be.equal(3);
+        C.setConstructor(function(x, y, z) {
+            this.z = 30*z;
+        });
+        var c2 = new C(1,2,3);
+        expect(c2.x).to.be.equal(1);
+        expect(c2.y).to.be.equal(2);
+        expect(c2.z).to.be.equal(90);
+    });
+
+    it('Multiple levels (3) changing two', function () {
+        var A = Classes.createClass(function(x) {
+            this.x = x;
+        });
+        var B = A.subClass(function(x, y) {
+            this.y = y;
+        });
+        var C = B.subClass(function(x, y, z) {
+            this.z = z;
+        });
+        var c1 = new C(1,2,3);
+        expect(c1.x).to.be.equal(1);
+        expect(c1.y).to.be.equal(2);
+        expect(c1.z).to.be.equal(3);
+        B.setConstructor(function(x, y) {
+            this.y = 20*y;
+        });
+        C.setConstructor(function(x, y, z) {
+            this.z = 30*z;
+        });
+        var c2 = new C(1,2,3);
+        expect(c2.x).to.be.equal(1);
+        expect(c2.y).to.be.equal(40);
+        expect(c2.z).to.be.equal(90);
+    });
+
+});
+
+describe('changing constructor not chained', function() {
+
+    it('Multiple levels (2) changing second', function () {
+        var A = Classes.createClass(function(x) {
+            this.x = x;
+        });
+        var B = A.subClass(function(x, y) {
+            this.y = y;
+        }, false);
+        var b1 = new B(1,2);
+        expect(b1.x===undefined).to.be.true;
+        expect(b1.y).to.be.equal(2);
+        B.setConstructor(function(x, y) {
+            this.y = 3*y;
+        }, false);
+        var b2 = new B(1,2);
+        expect(b2.x===undefined).to.be.true;
+        expect(b2.y).to.be.equal(6);
+    });
+
+    it('Multiple levels (2) changing first', function () {
+        var A = Classes.createClass(function(x) {
+            this.x = x;
+        });
+        var B = A.subClass(function(x, y) {
+            this.y = y;
+        }, false);
+        var b1 = new B(1,2);
+        expect(b1.x===undefined).to.be.true;
+        expect(b1.y).to.be.equal(2);
+        A.setConstructor(function(x) {
+            this.x = 3*x;
+        }, false);
+        var b2 = new B(1,2);
+        expect(b2.x===undefined).to.be.true;
+        expect(b2.y).to.be.equal(2);
+    });
+
+    it('Multiple levels (2) changing both', function () {
+        var A = Classes.createClass(function(x) {
+            this.x = x;
+        });
+        var B = A.subClass(function(x, y) {
+            this.y = y;
+        }, false);
+        var b1 = new B(1,2);
+        expect(b1.x===undefined).to.be.true;
+        expect(b1.y).to.be.equal(2);
+        A.setConstructor(function(x) {
+            this.x = 3*x;
+        });
+        B.setConstructor(function(x, y) {
+            this.y = 4*y;
+        }, false);
+        var b2 = new B(1,2);
+        expect(b2.x===undefined).to.be.true;
+        expect(b2.y).to.be.equal(8);
+    });
+
+    it('Multiple levels (3) changing first', function () {
+        var A = Classes.createClass(function(x) {
+            this.x = x;
+        });
+        var B = A.subClass(function(x, y) {
+            this.y = y;
+        }, false);
+        var C = B.subClass(function(x, y, z) {
+            this.z = z;
+        });
+        var c1 = new C(1,2,3);
+        expect(c1.x===undefined).to.be.true;
+        expect(c1.y).to.be.equal(2);
+        expect(c1.z).to.be.equal(3);
+        A.setConstructor(function(x) {
+            this.x = 10*x;
+        });
+        var c2 = new C(1,2,3);
+        expect(c2.x===undefined).to.be.true;
+        expect(c2.y).to.be.equal(2);
+        expect(c2.z).to.be.equal(3);
+    });
+
+    it('Multiple levels (3) changing second', function () {
+        var A = Classes.createClass(function(x) {
+            this.x = x;
+        });
+        var B = A.subClass(function(x, y) {
+            this.y = y;
+        }, false);
+        var C = B.subClass(function(x, y, z) {
+            this.z = z;
+        });
+        var c1 = new C(1,2,3);
+        expect(c1.x===undefined).to.be.true;
+        expect(c1.y).to.be.equal(2);
+        expect(c1.z).to.be.equal(3);
+        B.setConstructor(function(x, y) {
+            this.y = 20*y;
+        }, false);
+        var c2 = new C(1,2,3);
+        expect(c2.x===undefined).to.be.true;
+        expect(c2.y).to.be.equal(40);
+        expect(c2.z).to.be.equal(3);
+    });
+
+    it('Multiple levels (3) changing firth', function () {
+        var A = Classes.createClass(function(x) {
+            this.x = x;
+        });
+        var B = A.subClass(function(x, y) {
+            this.y = y;
+        }, false);
+        var C = B.subClass(function(x, y, z) {
+            this.z = z;
+        });
+        var c1 = new C(1,2,3);
+        expect(c1.x===undefined).to.be.true;
+        expect(c1.y).to.be.equal(2);
+        expect(c1.z).to.be.equal(3);
+        C.setConstructor(function(x, y, z) {
+            this.z = 30*z;
+        });
+        var c2 = new C(1,2,3);
+        expect(c2.x===undefined).to.be.true;
+        expect(c2.y).to.be.equal(2);
+        expect(c2.z).to.be.equal(90);
+    });
+
+    it('Multiple levels (3) changing two', function () {
+        var A = Classes.createClass(function(x) {
+            this.x = x;
+        });
+        var B = A.subClass(function(x, y) {
+            this.y = y;
+        }, false);
+        var C = B.subClass(function(x, y, z) {
+            this.z = z;
+        });
+        var c1 = new C(1,2,3);
+        expect(c1.x===undefined).to.be.true;
+        expect(c1.y).to.be.equal(2);
+        expect(c1.z).to.be.equal(3);
+        B.setConstructor(function(x, y) {
+            this.y = 20*y;
+        }, false);
+        C.setConstructor(function(x, y, z) {
+            this.z = 30*z;
+        });
+        var c2 = new C(1,2,3);
+        expect(c2.x===undefined).to.be.true;
+        expect(c2.y).to.be.equal(40);
+        expect(c2.z).to.be.equal(90);
+    });
+
+});
+
+
+describe('changing constructor chained, redefined unchained', function() {
+
+    it('Multiple levels (2) changing second', function () {
+        var A = Classes.createClass(function(x) {
+            this.x = x;
+        });
+        var B = A.subClass(function(x, y) {
+            this.y = y;
+        });
+        var b1 = new B(1,2);
+        expect(b1.x).to.be.equal(1);
+        expect(b1.y).to.be.equal(2);
+        B.setConstructor(function(x, y) {
+            this.y = 3*y;
+        }, false);
+        var b2 = new B(1,2);
+        expect(b2.x===undefined).to.be.true;
+        expect(b2.y).to.be.equal(6);
+    });
+
+    it('Multiple levels (2) changing both', function () {
+        var A = Classes.createClass(function(x) {
+            this.x = x;
+        });
+        var B = A.subClass(function(x, y) {
+            this.y = y;
+        });
+        var b1 = new B(1,2);
+        expect(b1.x).to.be.equal(1);
+        expect(b1.y).to.be.equal(2);
+        A.setConstructor(function(x) {
+            this.x = 3*x;
+        });
+        B.setConstructor(function(x, y) {
+            this.y = 4*y;
+        }, false);
+        var b2 = new B(1,2);
+        expect(b2.x===undefined).to.be.true;
+        expect(b2.y).to.be.equal(8);
+    });
+
+    it('Multiple levels (3) changing second', function () {
+        var A = Classes.createClass(function(x) {
+            this.x = x;
+        });
+        var B = A.subClass(function(x, y) {
+            this.y = y;
+        });
+        var C = B.subClass(function(x, y, z) {
+            this.z = z;
+        });
+        var c1 = new C(1,2,3);
+        expect(c1.x).to.be.equal(1);
+        expect(c1.y).to.be.equal(2);
+        expect(c1.z).to.be.equal(3);
+        B.setConstructor(function(x, y) {
+            this.y = 20*y;
+        }, false);
+        var c2 = new C(1,2,3);
+        expect(c2.x===undefined).to.be.true;
+        expect(c2.y).to.be.equal(40);
+        expect(c2.z).to.be.equal(3);
+    });
+
+    it('Multiple levels (3) changing firth', function () {
+        var A = Classes.createClass(function(x) {
+            this.x = x;
+        });
+        var B = A.subClass(function(x, y) {
+            this.y = y;
+        });
+        var C = B.subClass(function(x, y, z) {
+            this.z = z;
+        });
+        var c1 = new C(1,2,3);
+        expect(c1.x).to.be.equal(1);
+        expect(c1.y).to.be.equal(2);
+        expect(c1.z).to.be.equal(3);
+        C.setConstructor(function(x, y, z) {
+            this.z = 30*z;
+        }, false);
+        var c2 = new C(1,2,3);
+        expect(c2.x===undefined).to.be.true;
+        expect(c2.y===undefined).to.be.true;
+        expect(c2.z).to.be.equal(90);
+    });
+
+    it('Multiple levels (3) changing two', function () {
+        var A = Classes.createClass(function(x) {
+            this.x = x;
+        });
+        var B = A.subClass(function(x, y) {
+            this.y = y;
+        });
+        var C = B.subClass(function(x, y, z) {
+            this.z = z;
+        });
+        var c1 = new C(1,2,3);
+        expect(c1.x).to.be.equal(1);
+        expect(c1.y).to.be.equal(2);
+        expect(c1.z).to.be.equal(3);
+        B.setConstructor(function(x, y) {
+            this.y = 20*y;
+        }, false);
+        C.setConstructor(function(x, y, z) {
+            this.z = 30*z;
+        }, false);
+        var c2 = new C(1,2,3);
+        expect(c2.x===undefined).to.be.true;
+        expect(c2.y===undefined).to.be.true;
+        expect(c2.z).to.be.equal(90);
+    });
+
+});
+
+describe('changing constructor not chained redefined chained', function() {
+
+    it('Multiple levels (2) changing second', function () {
+        var A = Classes.createClass(function(x) {
+            this.x = x;
+        });
+        var B = A.subClass(function(x, y) {
+            this.y = y;
+        }, false);
+        var b1 = new B(1,2);
+        expect(b1.x===undefined).to.be.true;
+        expect(b1.y).to.be.equal(2);
+        B.setConstructor(function(x, y) {
+            this.y = 3*y;
+        });
+        var b2 = new B(1,2);
+        expect(b2.x).to.be.equal(1);
+        expect(b2.y).to.be.equal(6);
+    });
+
+    it('Multiple levels (2) changing both', function () {
+        var A = Classes.createClass(function(x) {
+            this.x = x;
+        });
+        var B = A.subClass(function(x, y) {
+            this.y = y;
+        }, false);
+        var b1 = new B(1,2);
+        expect(b1.x===undefined).to.be.true;
+        expect(b1.y).to.be.equal(2);
+        A.setConstructor(function(x) {
+            this.x = 3*x;
+        });
+        B.setConstructor(function(x, y) {
+            this.y = 4*y;
+        });
+        var b2 = new B(1,2);
+        expect(b2.x).to.be.equal(3);
+        expect(b2.y).to.be.equal(8);
+    });
+
+    it('Multiple levels (3) changing second', function () {
+        var A = Classes.createClass(function(x) {
+            this.x = x;
+        });
+        var B = A.subClass(function(x, y) {
+            this.y = y;
+        }, false);
+        var C = B.subClass(function(x, y, z) {
+            this.z = z;
+        });
+        var c1 = new C(1,2,3);
+        expect(c1.x===undefined).to.be.true;
+        expect(c1.y).to.be.equal(2);
+        expect(c1.z).to.be.equal(3);
+        B.setConstructor(function(x, y) {
+            this.y = 20*y;
+        });
+        var c2 = new C(1,2,3);
+        expect(c2.x).to.be.equal(1);
+        expect(c2.y).to.be.equal(40);
+        expect(c2.z).to.be.equal(3);
+    });
+
+    it('Multiple levels (3) changing two', function () {
+        var A = Classes.createClass(function(x) {
+            this.x = x;
+        });
+        var B = A.subClass(function(x, y) {
+            this.y = y;
+        }, false);
+        var C = B.subClass(function(x, y, z) {
+            this.z = z;
+        });
+        var c1 = new C(1,2,3);
+        expect(c1.x===undefined).to.be.true;
+        expect(c1.y).to.be.equal(2);
+        expect(c1.z).to.be.equal(3);
+        B.setConstructor(function(x, y) {
+            this.y = 20*y;
+        });
+        C.setConstructor(function(x, y, z) {
+            this.z = 30*z;
+        });
+        var c2 = new C(1,2,3);
+        expect(c2.x).to.be.equal(1);
+        expect(c2.y).to.be.equal(40);
+        expect(c2.z).to.be.equal(90);
+    });
+
+});

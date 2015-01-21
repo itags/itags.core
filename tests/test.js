@@ -46,51 +46,143 @@ var Circle = Shape.subClass(
 var NOOP = function() {};
 
 
-itagCore.setPrototypeChain(false);
-        describe('$orig', function () {
+// itagCore.setPrototypeChain(false);
 
 
-            it('mergePrototypes with $orig without argument', function() {
-                var A = DOCUMENT.createItag('i-a18', {
-                        init: function() {
-                            this.x = 'a';
-                        },
-                        printValues: function() {
-                            return this.x;
-                        }
-                    });
+/*
+        describe('redefine init', function () {
+            it('Elements should be re-initialized', function (done) {
+                var count = 0,
+                    D = DOCUMENT.createItag('i-d1', {
+                    init: function() {
+                        this.text = 'first';
+                    },
+                    render: function() {
+                        return this.text;
+                    },
+                    destroy: function() {
+                        count++;
+                    }
+                });
+                var d = new D();
 
-                var a = new A();
 
-                A.mergePrototypes({
-                    printValues: function() {
-                        return 'new '+this.$orig();
+                DOCUMENT.body.appendChild(d);
+
+                expect(d.vnode.innerHTML).to.be.equal('first');
+
+                D.mergePrototypes({
+                    init:function() {
+                        this.text = 'second';
                     }
                 }, true);
-
-                expect(a.printValues('b')).to.be.equal('new a');
-            });
-
-            it('mergePrototypes with $orig with argument', function() {
-                var A = DOCUMENT.createItag('i-a19', {
-                        init: function(x) {
-                            this.x = 'a';
-                        },
-                        printValues: function(v) {
-                            return this.x+v;
-                        }
-                    });
-
-                var a = new A();
-
-                A.mergePrototypes({
-                    printValues: function(v) {
-                        return 'new '+this.$orig(v);
-                    }
-                }, true);
-
-                expect(a.printValues('b')).to.be.equal('new ab');
+                setTimeout(function() {
+                    expect(d.vnode.innerHTML).to.be.equal('second');
+                    expect(count).to.be.equal(1);
+                    d.remove();
+                    done();
+                }, 50);
             });
 
         });
 
+        describe('redefine render', function () {
+
+            it('Elements should be re-rendered', function (done) {
+                var countInit = 0, countDestroy = 0,
+                    D = DOCUMENT.createItag('i-d2', {
+                    init: function() {
+                        countInit++;
+                        this.text = 'the content';
+                    },
+                    render: function() {
+                        return this.text;
+                    },
+                    destroy: function() {
+                        countDestroy++;
+                    }
+                });
+                var d = new D();
+                DOCUMENT.body.appendChild(d);
+                expect(d.vnode.innerHTML).to.be.equal('the content');
+                D.mergePrototypes({
+                    render:function() {
+                        return this.text + ' new';
+                    }
+                }, true);
+                setTimeout(function() {
+                    expect(d.vnode.innerHTML).to.be.equal('the content new');
+                    expect(countInit).to.be.equal(1);
+                    expect(countDestroy).to.be.equal(0);
+                    d.remove();
+                    done();
+                }, 50);
+            });
+
+        });
+
+*/
+        describe('removed init', function () {
+
+            it('Elements should be re-initialized', function (done) {
+                var count = 0,
+                    initCount = 0,
+                    D = DOCUMENT.createItag('i-d1', {
+                    init: function() {
+                        this.text = 'first';
+console.warn('D.INIT');
+                        initCount++;
+                    },
+                    render: function() {
+                        return this.text;
+                    },
+                    destroy: function() {
+                        count++;
+                    }
+                });
+                var d = new D();
+                DOCUMENT.body.appendChild(d);
+                expect(d.vnode.innerHTML).to.be.equal('first');
+                expect(initCount).to.be.equal(1);
+                D.removePrototypes('init');
+                setTimeout(function() {
+                    expect(d.vnode.innerHTML).to.be.equal('first');
+                    expect(initCount).to.be.equal(1);
+                    expect(count).to.be.equal(1);
+                    d.remove();
+                    done();
+                }, 50);
+            });
+
+        });
+/*
+        describe('redefine render', function () {
+
+            it('Elements should be re-rendered', function (done) {
+                var countInit = 0, countDestroy = 0,
+                    D = DOCUMENT.createItag('i-d2', {
+                    init: function() {
+                        countInit++;
+                        this.text = 'the content';
+                    },
+                    render: function() {
+                        return this.text;
+                    },
+                    destroy: function() {
+                        countDestroy++;
+                    }
+                });
+                var d = new D();
+                DOCUMENT.body.appendChild(d);
+                expect(d.vnode.innerHTML).to.be.equal('the content');
+                D.removePrototypes('render');
+                setTimeout(function() {
+                    expect(d.vnode.innerHTML).to.be.equal('');
+                    expect(countInit).to.be.equal(1);
+                    expect(countDestroy).to.be.equal(0);
+                    d.remove();
+                }, 50);
+            });
+
+        });
+*/

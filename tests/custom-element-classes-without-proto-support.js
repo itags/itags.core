@@ -6,6 +6,7 @@
 
     var expect = require('chai').expect,
         DOCUMENT = window.document,
+        async = require('utils').asyncSilent,
         itagCore = require("../itags.core")(window, true);
 
 
@@ -15,17 +16,8 @@
 
         var IShape = DOCUMENT.createItag('i-shape', {
                 init: function () {
-                    // should only be set the firts time
-                    // otherwise there is a bug: init shouldn't run twice
-                    if (this.shapeinited) {
-                        this.x = 'double init called';
-                        this.y = 'double init called';
-                    }
-                    else {
-                        this.x = 10;
-                        this.y = 20;
-                    }
-                    this.shapeinited = true;
+                    this.x = 10;
+                    this.y = 20;
                 },
                 move: function (x, y) {
                     this.x += x;
@@ -35,32 +27,14 @@
                     this.bg = '#111';
                 },
                 destroy: function() {
-                    // should only be runned once at removal node from the dom
-                    // otherwise there is a bug: destroy shouldn't run twice
-                    if (this.shapedestroyed) {
-                        this.x = 'double destroy called';
-                        this.y = 'double destroy called';
-                    }
-                    else {
-                        this.x = -1;
-                        this.y = -2;
-                    }
-                    this.shapedestroyed = true;
+                    this.x = -1;
+                    this.y = -2;
                 }
             }),
             ICircle = IShape.subClass('i-circle', {
                 init: function () {
-                    // should only be set the firts time
-                    // otherwise there is a bug: init shouldn't run twice
-                    if (this.circleinited) {
-                        this.x = 'double init called';
-                        this.r = 'double init called';
-                    }
-                    else {
-                        this.x = 100;
-                        this.r = 5;
-                    }
-                    this.circleinited = true;
+                    this.x = 100;
+                    this.r = 5;
                 },
                 area: function () {
                     return this.r * this.r * Math.PI;
@@ -69,18 +43,9 @@
                     this.bg = '#222';
                 },
                 destroy: function() {
-                    // should only be runned once at removal node from the dom
-                    // otherwise there is a bug: destroy shouldn't run twice
-                    if (this.circledestroyed) {
-                        this.x = 'double destroy called';
-                        this.y = 'double destroy called';
-                    }
-                    else {
-                        this.x = -11;
-                        this.y = -12;
-                        this.r = -13;
-                    }
-                    this.circledestroyed = true;
+                    this.x = -11;
+                    this.y = -12;
+                    this.r = -13;
                 }
             });
 
@@ -233,56 +198,70 @@
                         }
                     });
 
-                it ('one level', function () {
+                it ('one level', function (done) {
                     var a = new A();
-                    expect(a.a).eql(3);
-                    a.add(2);
-                    expect(a.a).eql(5);
+                    async(function() {
+                        expect(a.a).eql(3);
+                        a.add(2);
+                        expect(a.a).eql(5);
+                        done();
+                    });
                 });
 
-                it ('two levels', function () {
+                it ('two levels', function (done) {
 
                     var b = new B();
-                    expect(b.a).eql(3);
-                    expect(b.b).eql(4);
-                    b.add(2);
-                    expect(b.a).eql(7);
-
-                    // Later classes should not interfer with the previous
-                    var a = new A();
-                    expect(a.a).eql(3);
-                    expect(a.b===undefined).to.be.true;
-                    a.add(2);
-                    expect(a.a).eql(5);
-                    expect(b.a).eql(7);
+                    async(function() {
+                        expect(b.a).eql(3);
+                        expect(b.b).eql(4);
+                        b.add(2);
+                        expect(b.a).eql(7);
+                        // Later classes should not interfer with the previous
+                        var a = new A();
+                        async(function() {
+                            expect(a.a).eql(3);
+                            expect(a.b===undefined).to.be.true;
+                            a.add(2);
+                            expect(a.a).eql(5);
+                            expect(b.a).eql(7);
+                            done();
+                        });
+                    });
                 });
 
-                it ('three levels', function () {
+                it ('three levels', function (done) {
                     var c = new C();
-                    expect(c.a).eql(3);
-                    expect(c.b).eql(4);
-                    expect(c.c).eql(5);
-                    c.add(2);
-                    expect(c.a).eql(15);
+                    async(function() {
+                        expect(c.a).eql(3);
+                        expect(c.b).eql(4);
+                        expect(c.c).eql(5);
+                        c.add(2);
+                        expect(c.a).eql(15);
 
-                    // Later classes should not interfer with the previous
-                    var b = new B();
-                    expect(b.a).eql(3);
-                    expect(b.b).eql(4);
-                    expect(b.c===undefined).to.be.true;
-                    b.add(2);
-                    expect(b.a).eql(7);
-                    expect(c.a).eql(15);
+                        // Later classes should not interfer with the previous
+                        var b = new B();
+                        async(function() {
+                            expect(b.a).eql(3);
+                            expect(b.b).eql(4);
+                            expect(b.c===undefined).to.be.true;
+                            b.add(2);
+                            expect(b.a).eql(7);
+                            expect(c.a).eql(15);
 
-                    // Later classes should not interfer with the previous
-                    var a = new A();
-                    expect(a.a).eql(3);
-                    expect(a.b===undefined).to.be.true;
-                    expect(a.c===undefined).to.be.true;
-                    a.add(2);
-                    expect(a.a).eql(5);
-                    expect(b.a).eql(7);
-                    expect(c.a).eql(15);
+                            // Later classes should not interfer with the previous
+                            var a = new A();
+                            async(function() {
+                                expect(a.a).eql(3);
+                                expect(a.b===undefined).to.be.true;
+                                expect(a.c===undefined).to.be.true;
+                                a.add(2);
+                                expect(a.a).eql(5);
+                                expect(b.a).eql(7);
+                                expect(c.a).eql(15);
+                                done();
+                            });
+                        });
+                    });
                 });
 
             });
@@ -621,7 +600,7 @@
                 expect(a.whatever('1')).eql('undefinedbB');
             });
 
-            it('mergePrototypes with $orig without argument', function() {
+            it('mergePrototypes with $orig without argument', function(done) {
                 var A = DOCUMENT.createItag('i-a18', {
                         init: function() {
                             this.x = 'a';
@@ -638,11 +617,13 @@
                         return 'new '+this.$orig();
                     }
                 }, true);
-
-                expect(a.printValues('b')).to.be.equal('new a');
+                async(function() {
+                    expect(a.printValues('b')).to.be.equal('new a');
+                    done();
+                });
             });
 
-            it('mergePrototypes with $orig with argument', function() {
+            it('mergePrototypes with $orig with argument', function(done) {
                 var A = DOCUMENT.createItag('i-a19', {
                         init: function(x) {
                             this.x = 'a';
@@ -660,24 +641,26 @@
                     }
                 }, true);
 
-                expect(a.printValues('b')).to.be.equal('new ab');
+                async(function() {
+                    expect(a.printValues('b')).to.be.equal('new ab');
+                    done();
+                });
             });
 
         });
 
 
-        describe('$orig on render', function () {
+        describe('$orig on sync', function () {
 
             it('existing class, override',  function () {
                 var ClassA = DOCUMENT.createItag('i-za9', {
                     b: 'a',
-                    render: function (v) {
+                    sync: function (v) {
                         expect(this.b).eql('a');
-                        expect(v).eql('ec');
                         return this.b + v;
                     }
                 }).mergePrototypes({
-                    render: function(v) {
+                    sync: function(v) {
                         return this.$orig(v + 'c') + 'd';
                     }
                 }, true);
@@ -685,147 +668,147 @@
 
                 var a = new ClassA();
                 expect(a.b).be.eql('a');
-                expect(a.renderUI('e')).eql('aecd');
+                expect(a._syncUI('e')).eql('aecd');
             });
             it('Two level inheritance each with plugin', function () {
                 var ClassA = DOCUMENT.createItag('i-za10', {
-                    render: function (a) {
+                    sync: function (a) {
                         return a + 'a';
                     }
                 }).mergePrototypes({
-                    render: function (b) {
+                    sync: function (b) {
                         return this.$orig(b) + 'b';
                     }
                 }, true);
                 var ClassB = ClassA.subClass('i-zb3', {
-                    render: function (c) {
-                        return this.$superProp('render', c) + 'c';
+                    sync: function (c) {
+                        return this.$superProp('sync', c) + 'c';
                     }
                 }).mergePrototypes({
-                    render: function (d) {
+                    sync: function (d) {
                         return this.$orig(d) + 'd';
                     }
                 }, true);
 
                 var b = new ClassB();
-                expect(b.renderUI('0')).eql('0abcd');
+                expect(b._syncUI('0')).eql('0abcd');
                 var a = new ClassA();
-                expect(a.renderUI('1')).eql('1ab');
+                expect(a._syncUI('1')).eql('1ab');
             });
             it('Two level inheritance each with two plugins each', function () {
                 var ClassA = DOCUMENT.createItag('i-za11', {
-                    render: function (a) {
+                    sync: function (a) {
                         return a + 'a';
                     }
                 }).mergePrototypes({
-                    render: function (b) {
+                    sync: function (b) {
                         return this.$orig(b) + 'b';
                     }
                 }, true).mergePrototypes({
-                    render: function (b) {
+                    sync: function (b) {
                         return this.$orig(b) + 'B';
                     }
                 }, true);
                 var ClassB = ClassA.subClass('i-zb4', {
-                    render: function (c) {
-                        return this.$superProp('render', c) + 'c';
+                    sync: function (c) {
+                        return this.$superProp('sync', c) + 'c';
                     }
                 }).mergePrototypes({
-                    render: function (d) {
+                    sync: function (d) {
                         return this.$orig(d) + 'd';
                     }
                 }, true).mergePrototypes({
-                    render: function (d) {
+                    sync: function (d) {
                         return this.$orig(d) + 'D';
                     }
                 }, true);
 
                 var b = new ClassB();
-                expect(b.renderUI('0')).eql('0abBcdD');
+                expect(b._syncUI('0')).eql('0abBcdD');
                 var a = new ClassA();
-                expect(a.renderUI('1')).eql('1abB');
+                expect(a._syncUI('1')).eql('1abB');
             });
             it('Three level inheritance each with plugin', function () {
                 var ClassA = DOCUMENT.createItag('i-za12', {
-                    render: function (a) {
+                    sync: function (a) {
                         return a + 'a';
                     }
                 }).mergePrototypes({
-                    render: function (b) {
+                    sync: function (b) {
                         return this.$orig(b) + 'b';
                     }
                 }, true);
                 var ClassB = ClassA.subClass('i-zb5', {
-                    render: function (c) {
-                        return this.$superProp('render', c) + 'c';
+                    sync: function (c) {
+                        return this.$superProp('sync', c) + 'c';
                     }
                 }).mergePrototypes({
-                    render: function (d) {
+                    sync: function (d) {
                         return this.$orig(d) + 'd';
                     }
                 }, true);
 
                 var b = new ClassB();
-                expect(b.renderUI('0')).eql('0abcd');
+                expect(b._syncUI('0')).eql('0abcd');
                 var a = new ClassA();
-                expect(a.renderUI('1')).eql('1ab');
+                expect(a._syncUI('1')).eql('1ab');
             });
             it('Three level inheritance each with two plugins each', function () {
                 var ClassA = DOCUMENT.createItag('i-za13', {
-                    render: function (a) {
+                    sync: function (a) {
                         return a + 'a';
                     }
                 }).mergePrototypes({
-                    render: function (b) {
+                    sync: function (b) {
                         return this.$orig(b) + 'b';
                     }
                 }, true).mergePrototypes({
-                    render: function (b) {
+                    sync: function (b) {
                         return this.$orig(b) + 'B';
                     }
                 }, true);
                 var ClassB = ClassA.subClass('i-zb6', {
-                    render: function (c) {
-                        return this.$superProp('render', c) + 'c';
+                    sync: function (c) {
+                        return this.$superProp('sync', c) + 'c';
                     }
                 }).mergePrototypes({
-                    render: function (d) {
+                    sync: function (d) {
                         return this.$orig(d) + 'd';
                     }
                 }, true).mergePrototypes({
-                    render: function (d) {
+                    sync: function (d) {
                         return this.$orig(d) + 'D';
                     }
                 }, true);
 
                 var b = new ClassB();
-                expect(b.renderUI('0')).eql('0abBcdD');
+                expect(b._syncUI('0')).eql('0abBcdD');
                 var a = new ClassA();
-                expect(a.renderUI('1')).eql('1abB');
+                expect(a._syncUI('1')).eql('1abB');
             });
             it('orig present even if no original', function (){
                 var ClassA = DOCUMENT.createItag('i-za14', {
                 }).mergePrototypes({
-                    render: function (b) {
+                    sync: function (b) {
                         return this.$orig(b) + 'b';
                     }
                 }, true);
                 var a = new ClassA();
-                expect(a.renderUI('1')).eql('undefinedb');
+                expect(a._syncUI('1')).eql('undefinedb');
             });
             it('orig present even if no original two levels deep', function (){
                 var ClassA = DOCUMENT.createItag('i-za15', {
                 }).mergePrototypes({
-                    render: function (b) {
+                    sync: function (b) {
                         return this.$orig(b) + 'b';
                     }
                 }, true).mergePrototypes({
-                    render: function (b) {
+                    sync: function (b) {
                         return this.$orig(b) + 'B';
                     }
                 }, true);
                 var a = new ClassA();
-                expect(a.renderUI('1')).eql('undefinedbB');
+                expect(a._syncUI('1')).eql('undefinedbB');
             });
 
             it('orig present even if no original two levels deep, multiple methods', function (){
@@ -834,7 +817,7 @@
                     dummy1: function() {
                         return 'dummy1 returnvalue';
                     },
-                    render: function (b) {
+                    sync: function (b) {
                         return this.$orig(b) + 'b';
                     },
                     dummy2: function() {
@@ -847,7 +830,7 @@
                     dummy4: function() {
                         return 'dummy4 returnvalue';
                     },
-                    render: function (b) {
+                    sync: function (b) {
                         return this.$orig(b) + 'B';
                     },
                     dummy5: function() {
@@ -858,7 +841,7 @@
                     }
                 }, true);
                 var a = new ClassA();
-                expect(a.renderUI('1')).eql('undefinedbB');
+                expect(a._syncUI('1')).eql('undefinedbB');
             });
 
             it('orig present even if no original three levels deep, multiple methods', function (){
@@ -866,7 +849,7 @@
                     dummy1: function() {
                         return 'dummy1 returnvalue';
                     },
-                    render: function (b) {
+                    sync: function (b) {
                         return this.$orig(b) + 'b';
                     },
                     dummy2: function() {
@@ -879,7 +862,7 @@
                     dummy4: function() {
                         return 'dummy4 returnvalue';
                     },
-                    render: function (b) {
+                    sync: function (b) {
                         return this.$orig(b) + 'B';
                     },
                     dummy5: function() {
@@ -890,10 +873,10 @@
                     }
                 }, true);
                 var a = new ClassA();
-                expect(a.renderUI('1')).eql('undefinedbB');
+                expect(a._syncUI('1')).eql('undefinedbB');
             });
 
-            it('mergePrototypes with $orig without argument', function() {
+            it('mergePrototypes with $orig without argument', function(done) {
                 var A = DOCUMENT.createItag('i-za18', {
                         init: function() {
                             this.x = 'a';
@@ -910,11 +893,13 @@
                         return 'new '+this.$orig();
                     }
                 }, true);
-
-                expect(a.printValues('b')).to.be.equal('new a');
+                async(function(){
+                    expect(a.printValues('b')).to.be.equal('new a');
+                    done();
+                });
             });
 
-            it('mergePrototypes with $orig with argument', function() {
+            it('mergePrototypes with $orig with argument', function(done) {
                 var A = DOCUMENT.createItag('i-za19', {
                         init: function(x) {
                             this.x = 'a';
@@ -932,14 +917,17 @@
                     }
                 }, true);
 
-                expect(a.printValues('b')).to.be.equal('new ab');
+                async(function(){
+                    expect(a.printValues('b')).to.be.equal('new ab');
+                    done();
+                });
             });
 
         });
 
         describe('Chained init', function () {
 
-            it('chaining by default', function () {
+            it('chaining by default', function (done) {
                 var ClassA = DOCUMENT.createItag('i-a20', {
                         init: function() {
                             this.x = 1;
@@ -957,12 +945,15 @@
                         }
                     });
                 var c = new ClassC();
-                expect(c.x).to.be.equal(1);
-                expect(c.y).to.be.equal(2);
-                expect(c.z).to.be.equal(3);
+                async(function(){
+                    expect(c.x).to.be.equal(1);
+                    expect(c.y).to.be.equal(2);
+                    expect(c.z).to.be.equal(3);
+                    done();
+                });
             });
 
-            it('forced chaining level 3', function () {
+            it('forced chaining level 3', function (done) {
                 var ClassA = DOCUMENT.createItag('i-a21', {
                         init: function() {
                             this.x = 1;
@@ -980,12 +971,15 @@
                         }
                     });
                 var c = new ClassC();
-                expect(c.x).to.be.equal(1);
-                expect(c.y).to.be.equal(2);
-                expect(c.z).to.be.equal(3);
+                async(function(){
+                    expect(c.x).to.be.equal(1);
+                    expect(c.y).to.be.equal(2);
+                    expect(c.z).to.be.equal(3);
+                    done();
+                });
             });
 
-            it('forced chaining level 2+3 ', function () {
+            it('forced chaining level 2+3 ', function (done) {
                 var ClassA = DOCUMENT.createItag('i-a22', {
                         init: function() {
                             this.x = 1;
@@ -1003,12 +997,15 @@
                         }
                     }, true);
                 var c = new ClassC();
-                expect(c.x).to.be.equal(1);
-                expect(c.y).to.be.equal(2);
-                expect(c.z).to.be.equal(3);
+                async(function(){
+                    expect(c.x).to.be.equal(1);
+                    expect(c.y).to.be.equal(2);
+                    expect(c.z).to.be.equal(3);
+                    done();
+                });
             });
 
-            it('forced chaining 3 levels', function () {
+            it('forced chaining 3 levels', function (done) {
                 var ClassA = DOCUMENT.createItag('i-a23', {
                         init: function() {
                             this.x = 1;
@@ -1026,12 +1023,15 @@
                         }
                     }, true);
                 var c = new ClassC();
-                expect(c.x).to.be.equal(1);
-                expect(c.y).to.be.equal(2);
-                expect(c.z).to.be.equal(3);
+                async(function(){
+                    expect(c.x).to.be.equal(1);
+                    expect(c.y).to.be.equal(2);
+                    expect(c.z).to.be.equal(3);
+                    done();
+                });
             });
 
-            it('forced no chaining level 3', function () {
+            it('forced no chaining level 3', function (done) {
                 var ClassA = DOCUMENT.createItag('i-a24', {
                         init: function() {
                             this.x = 1;
@@ -1049,12 +1049,15 @@
                         }
                     });
                 var c = new ClassC();
-                expect(c.x===undefined).to.be.true;
-                expect(c.y).to.be.equal(2);
-                expect(c.z).to.be.equal(3);
+                async(function(){
+                    expect(c.x===undefined).to.be.true;
+                    expect(c.y).to.be.equal(2);
+                    expect(c.z).to.be.equal(3);
+                    done();
+                });
             });
 
-            it('forced no chaining level 2+3 ', function () {
+            it('forced no chaining level 2+3 ', function (done) {
                 var ClassA = DOCUMENT.createItag('i-a25', {
                         init: function() {
                             this.x = 1;
@@ -1072,12 +1075,15 @@
                         }
                     }, false);
                 var c = new ClassC();
-                expect(c.x===undefined).to.be.true;
-                expect(c.y===undefined).to.be.true;
-                expect(c.z).to.be.equal(3);
+                async(function(){
+                    expect(c.x===undefined).to.be.true;
+                    expect(c.y===undefined).to.be.true;
+                    expect(c.z).to.be.equal(3);
+                    done();
+                });
             });
 
-            it('forced no chaining 3 levels', function () {
+            it('forced no chaining 3 levels', function (done) {
                 var ClassA = DOCUMENT.createItag('i-a26', {
                         init: function() {
                             this.x = 1;
@@ -1095,12 +1101,15 @@
                         }
                     }, false);
                 var c = new ClassC();
-                expect(c.x===undefined).to.be.true;
-                expect(c.y===undefined).to.be.true;
-                expect(c.z).to.be.equal(3);
+                async(function(){
+                    expect(c.x===undefined).to.be.true;
+                    expect(c.y===undefined).to.be.true;
+                    expect(c.z).to.be.equal(3);
+                    done();
+                });
             });
 
-            it('forced no chaining level 2+3  redefined init', function () {
+            it('forced no chaining level 2+3  redefined init', function (done) {
                 var ClassA = DOCUMENT.createItag('i-a27', {
                         init: function() {
                             this.x = 1;
@@ -1119,12 +1128,15 @@
                         }
                     }, false);
                 var c = new ClassC();
-                expect(c.x).to.be.equal(1);
-                expect(c.y).to.be.equal(2);
-                expect(c.z).to.be.equal(3);
+                async(function(){
+                    expect(c.x).to.be.equal(1);
+                    expect(c.y).to.be.equal(2);
+                    expect(c.z).to.be.equal(3);
+                    done();
+                });
             });
 
-            it('forced no chaining 3 levels redefined init', function () {
+            it('forced no chaining 3 levels redefined init', function (done) {
                 var ClassA = DOCUMENT.createItag('i-a28', {
                         init: function() {
                             this.x = 1;
@@ -1144,9 +1156,12 @@
                         }
                     }, false);
                 var c = new ClassC();
-                expect(c.x).to.be.equal(1);
-                expect(c.y).to.be.equal(2);
-                expect(c.z).to.be.equal(3);
+                async(function(){
+                    expect(c.x).to.be.equal(1);
+                    expect(c.y).to.be.equal(2);
+                    expect(c.z).to.be.equal(3);
+                    done();
+                });
             });
 
         });
@@ -1164,15 +1179,17 @@
                         }
                     });
                 var a = new ClassA();
-                DOCUMENT.body.append(a);
-                expect(a.x).to.be.equal(10);
-                a.destroy();
-                expect(a.x).to.be.equal(10);
-                a.remove();
-                setTimeout(function() {
-                    expect(a.x).to.be.equal(1);
-                    done();
-                }, 50);
+                async(function(){
+                    DOCUMENT.body.append(a);
+                    expect(a.x).to.be.equal(10);
+                    a.destroy();
+                    expect(a.x).to.be.equal(10);
+                    a.remove();
+                    setTimeout(function() {
+                        expect(a.x).to.be.equal(1);
+                        done();
+                    }, 50);
+                });
             });
 
             it('calling Destroy 2 level', function (done){
@@ -1192,15 +1209,17 @@
                         }
                     });
                 var b = new ClassB();
-                DOCUMENT.body.append(b);
-                expect(b.x).to.be.equal(10);
-                b.destroy();
-                expect(b.x).to.be.equal(10);
-                b.remove();
-                setTimeout(function() {
-                    expect(b.x).to.be.equal(1);
-                    done();
-                }, 50);
+                async(function(){
+                    DOCUMENT.body.append(b);
+                    expect(b.x).to.be.equal(10);
+                    b.destroy();
+                    expect(b.x).to.be.equal(10);
+                    b.remove();
+                    setTimeout(function() {
+                        expect(b.x).to.be.equal(1);
+                        done();
+                    }, 50);
+                });
             });
 
             it('calling Destroy 3 level', function (done){
@@ -1226,15 +1245,17 @@
                         }
                     });
                 var c = new ClassC();
-                DOCUMENT.body.append(c);
-                expect(c.x).to.be.equal(10);
-                c.destroy();
-                expect(c.x).to.be.equal(10);
-                c.remove();
-                setTimeout(function() {
-                    expect(c.x).to.be.equal(1);
-                    done();
-                }, 50);
+                async(function(){
+                    DOCUMENT.body.append(c);
+                    expect(c.x).to.be.equal(10);
+                    c.destroy();
+                    expect(c.x).to.be.equal(10);
+                    c.remove();
+                    setTimeout(function() {
+                        expect(c.x).to.be.equal(1);
+                        done();
+                    }, 50);
+                });
             });
 
             it('calling Destroy 3 level and force notChained last class', function (done){
@@ -1260,15 +1281,17 @@
                         }
                     }, true, false);
                 var c = new ClassC();
-                DOCUMENT.body.append(c);
-                expect(c.x).to.be.equal(10);
-                c.destroy();
-                expect(c.x).to.be.equal(10);
-                c.remove();
-                setTimeout(function() {
-                    expect(c.x).to.be.equal(5);
-                    done();
-                }, 50);
+                async(function(){
+                    DOCUMENT.body.append(c);
+                    expect(c.x).to.be.equal(10);
+                    c.destroy();
+                    expect(c.x).to.be.equal(10);
+                    c.remove();
+                    setTimeout(function() {
+                        expect(c.x).to.be.equal(5);
+                        done();
+                    }, 50);
+                });
             });
 
             it('calling Destroy 3 level and force notChained second last class', function (done){
@@ -1294,15 +1317,17 @@
                         }
                     });
                 var c = new ClassC();
-                DOCUMENT.body.append(c);
-                expect(c.x).to.be.equal(10);
-                c.destroy();
-                expect(c.x).to.be.equal(10);
-                c.remove();
-                setTimeout(function() {
-                    expect(c.x).to.be.equal(2);
-                    done();
-                }, 50);
+                async(function(){
+                    DOCUMENT.body.append(c);
+                    expect(c.x).to.be.equal(10);
+                    c.destroy();
+                    expect(c.x).to.be.equal(10);
+                    c.remove();
+                    setTimeout(function() {
+                        expect(c.x).to.be.equal(2);
+                        done();
+                    }, 50);
+                });
             });
 
             it('calling Destroy 3 level and force notChained last 2 classes', function (done){
@@ -1328,15 +1353,17 @@
                         }
                     }, true, false);
                 var c = new ClassC();
-                DOCUMENT.body.append(c);
-                expect(c.x).to.be.equal(10);
-                c.destroy();
-                expect(c.x).to.be.equal(10);
-                c.remove();
-                setTimeout(function() {
-                    expect(c.x).to.be.equal(5);
-                    done();
-                }, 50);
+                async(function(){
+                    DOCUMENT.body.append(c);
+                    expect(c.x).to.be.equal(10);
+                    c.destroy();
+                    expect(c.x).to.be.equal(10);
+                    c.remove();
+                    setTimeout(function() {
+                        expect(c.x).to.be.equal(5);
+                        done();
+                    }, 50);
+                });
             });
 
             it('calling Destroy 3 level and force notChained last class yet reinitted', function (done){
@@ -1363,15 +1390,17 @@
                         }
                     }, true, false);
                 var c = new ClassC();
-                DOCUMENT.body.append(c);
-                expect(c.x).to.be.equal(10);
-                c.destroy();
-                expect(c.x).to.be.equal(10);
-                c.remove();
-                setTimeout(function() {
-                    expect(c.x).to.be.equal(1);
-                    done();
-                }, 50);
+                async(function(){
+                    DOCUMENT.body.append(c);
+                    expect(c.x).to.be.equal(10);
+                    c.destroy();
+                    expect(c.x).to.be.equal(10);
+                    c.remove();
+                    setTimeout(function() {
+                        expect(c.x).to.be.equal(1);
+                        done();
+                    }, 50);
+                });
             });
 
             it('calling Destroy 3 level and force notChained second last class yet reinitted', function (done){
@@ -1398,15 +1427,17 @@
                         }
                     });
                 var c = new ClassC();
-                DOCUMENT.body.append(c);
-                expect(c.x).to.be.equal(10);
-                c.destroy();
-                expect(c.x).to.be.equal(10);
-                c.remove();
-                setTimeout(function() {
-                    expect(c.x).to.be.equal(1);
-                    done();
-                }, 50);
+                async(function(){
+                    DOCUMENT.body.append(c);
+                    expect(c.x).to.be.equal(10);
+                    c.destroy();
+                    expect(c.x).to.be.equal(10);
+                    c.remove();
+                    setTimeout(function() {
+                        expect(c.x).to.be.equal(1);
+                        done();
+                    }, 50);
+                });
             });
 
             it('calling Destroy 3 level and force notChained last 2 classes yet reinitted on last', function (done){
@@ -1433,15 +1464,17 @@
                         }
                     }, true, false);
                 var c = new ClassC();
-                DOCUMENT.body.append(c);
-                expect(c.x).to.be.equal(10);
-                c.destroy();
-                expect(c.x).to.be.equal(10);
-                c.remove();
-                setTimeout(function() {
-                    expect(c.x).to.be.equal(2);
-                    done();
-                }, 50);
+                async(function(){
+                    DOCUMENT.body.append(c);
+                    expect(c.x).to.be.equal(10);
+                    c.destroy();
+                    expect(c.x).to.be.equal(10);
+                    c.remove();
+                    setTimeout(function() {
+                        expect(c.x).to.be.equal(2);
+                        done();
+                    }, 50);
+                });
             });
 
             it('calling Destroy 3 level and force notChained last 2 classes yet reinitted on both', function (done){
@@ -1469,15 +1502,17 @@
                         }
                     }, true, false);
                 var c = new ClassC();
-                DOCUMENT.body.append(c);
-                expect(c.x).to.be.equal(10);
-                c.destroy();
-                expect(c.x).to.be.equal(10);
-                c.remove();
-                setTimeout(function() {
-                    expect(c.x).to.be.equal(1);
-                    done();
-                }, 50);
+                async(function(){
+                    DOCUMENT.body.append(c);
+                    expect(c.x).to.be.equal(10);
+                    c.destroy();
+                    expect(c.x).to.be.equal(10);
+                    c.remove();
+                    setTimeout(function() {
+                        expect(c.x).to.be.equal(1);
+                        done();
+                    }, 50);
+                });
             });
 
         });
@@ -1834,7 +1869,7 @@
 
             });
 
-            it('Properties should modified well', function () {
+            it('Properties should modified well', function (done) {
                 var C1 = DOCUMENT.createItag('i-c41', {
                         init: function() {
                             this.x = 1;
@@ -1855,15 +1890,18 @@
                     }
                 });
                 var c4 = new C4();
-                expect(c4.x).to.be.equal(1);
-                c4.f();
-                expect(c4.x).to.be.equal(40);
-                c4.$superProp('f');
-                expect(c4.x).to.be.equal(20);
-                c4.$super.$superProp('f');
-                expect(c4.x).to.be.equal(20);
-                c4.$super.$super.$superProp('f');
-                expect(c4.x).to.be.equal(10);
+                async(function() {
+                    expect(c4.x).to.be.equal(1);
+                    c4.f();
+                    expect(c4.x).to.be.equal(40);
+                    c4.$superProp('f');
+                    expect(c4.x).to.be.equal(20);
+                    c4.$super.$superProp('f');
+                    expect(c4.x).to.be.equal(20);
+                    c4.$super.$super.$superProp('f');
+                    expect(c4.x).to.be.equal(10);
+                    done();
+                });
             });
         });
 
@@ -2275,6 +2313,147 @@
                 expect(c1.e===undefined).to.be.true;
                 expect(c1.f===undefined).to.be.true;
                 expect(c1.g===undefined).to.be.false;
+            });
+
+        });
+
+
+        describe('redefine init', function () {
+
+            it('Elements should be re-initialized', function (done) {
+                var count = 0,
+                    D = DOCUMENT.createItag('i-d1', {
+                    init: function() {
+                        this.text = 'first';
+                    },
+                    sync: function() {
+                        this.setHTML(this.text);
+                    },
+                    destroy: function() {
+                        count++;
+                    }
+                });
+                var d = new D();
+                async(function() {
+                    DOCUMENT.body.appendChild(d);
+                    expect(d.vnode.innerHTML).to.be.equal('first');
+                    D.mergePrototypes({
+                        init:function() {
+                            this.text = 'second';
+                        }
+                    }, true);
+                    setTimeout(function() {
+                        expect(d.vnode.innerHTML).to.be.equal('second');
+                        expect(count).to.be.equal(1);
+                        d.remove();
+                        done();
+                    }, 50);
+                });
+            });
+
+        });
+
+        describe('redefine sync', function () {
+
+            it('Elements should be re-synced', function (done) {
+                var countInit = 0, countDestroy = 0,
+                    D = DOCUMENT.createItag('i-d2', {
+                    init: function() {
+                        countInit++;
+                        this.text = 'the content';
+                    },
+                    sync: function() {
+                        this.setHTML(this.text);
+                    },
+                    destroy: function() {
+                        countDestroy++;
+                    }
+                });
+                var d = new D();
+                async(function() {
+                    DOCUMENT.body.appendChild(d);
+                    expect(d.vnode.innerHTML).to.be.equal('the content');
+                    D.mergePrototypes({
+                        sync:function() {
+                            this.setHTML(this.text+' new');
+                        }
+                    }, true);
+                    setTimeout(function() {
+                        expect(d.vnode.innerHTML).to.be.equal('the content new');
+                        expect(countInit).to.be.equal(1);
+                        expect(countDestroy).to.be.equal(0);
+                        d.remove();
+                        done();
+                    }, 50);
+                });
+            });
+
+        });
+
+        describe('removed init', function () {
+
+            it('Elements should be re-initialized', function (done) {
+                var count = 0,
+                    initCount = 0,
+                    D = DOCUMENT.createItag('i-d1', {
+                    init: function() {
+                        this.text = 'first';
+                        initCount++;
+                    },
+                    sync: function() {
+                        this.setHTML(this.text);
+                    },
+                    destroy: function() {
+                        count++;
+                    }
+                });
+                var d = new D();
+                async(function() {
+                    DOCUMENT.body.appendChild(d);
+                    expect(d.vnode.innerHTML).to.be.equal('first');
+                    expect(initCount).to.be.equal(1);
+                    D.removePrototypes('init');
+                    setTimeout(function() {
+                        expect(d.vnode.innerHTML).to.be.equal('first');
+                        expect(initCount).to.be.equal(1);
+                        expect(count).to.be.equal(1);
+                        d.remove();
+                        done();
+                    }, 50);
+                });
+            });
+
+        });
+
+        describe('redefine sync', function () {
+
+            it('Elements should be re-synced', function (done) {
+                var countInit = 0, countDestroy = 0,
+                    D = DOCUMENT.createItag('i-d2', {
+                    init: function() {
+                        countInit++;
+                        this.sometext = 'the content';
+                    },
+                    sync: function() {
+                        this.setHTML(this.sometext);
+                    },
+                    destroy: function() {
+                        countDestroy++;
+                    }
+                });
+                var d = new D();
+                async(function() {
+                    DOCUMENT.body.appendChild(d);
+                    expect(d.vnode.innerHTML).to.be.equal('the content');
+                    D.removePrototypes('sync');
+                    setTimeout(function() {
+                        expect(d.vnode.innerHTML).to.be.equal('the content');
+                        expect(countInit).to.be.equal(1);
+                        expect(countDestroy).to.be.equal(0);
+                        d.remove();
+                        done();
+                    }, 50);
+                });
             });
 
         });
