@@ -32,6 +32,7 @@
     },
     "dependencies": {
         "js-ext": "itsa/js-ext",
+        "io": "itsa/io",
         "utils": "itsa/utils",
         "polyfill": "itsa/polyfill",
         "event-dom": "itsa/event-dom",

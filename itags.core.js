@@ -25,53 +25,36 @@ var jsExt = require('js-ext/js-ext.js'), // want the full version: include it at
     ATTRIBUTE_REMOVED = ATTRIBUTE+REMOVE,
     ATTRIBUTE_CHANGED = ATTRIBUTE+CHANGE,
     ATTRIBUTE_INSERTED = ATTRIBUTE+INSERT,
-    DELAYED_FINALIZE_EVENTS = {
-        'mousedown': true,
-        'mouseup': true,
-        'mousemove': true,
-        'panmove': true,
-        'panstart': true,
-        'panleft': true,
-        'panright': true,
-        'panup': true,
-        'pandown': true,
-        'pinchmove': true,
-        'rotatemove': true,
-        'focus': true,
-        'blur': true,
-        'keydown': true,
-        'keyup': true,
-        'keypress': true
-    },
     DELAYED_EVT_TIME = 1000,
+    NATIVE_OBJECT_OBSERVE = !!Object.observe,
     ITAG_METHODS = createHashMap({
         init: '_initUI',
         sync: '_syncUI',
-        destroy: '_destroyUI'
+        destroy: '_destroyUI',
+        args: '_args'
     }),
     // ITAG_METHOD_VALUES must match previous ITAG_METHODS's values!
     ITAG_METHOD_VALUES = createHashMap({
         _initUI: true,
         _syncUI: true,
-        _destroyUI: true
+        _destroyUI: true,
+        _args: true
     }),
     NOOP = function() {};
 
-DELAYED_FINALIZE_EVENTS.keys().forEach(function(key) {
-    DELAYED_FINALIZE_EVENTS[key+'outside'] = true;
-});
-
 module.exports = function (window) {
+NATIVE_OBJECT_OBSERVE=false;
 
     var DOCUMENT = window.document,
         PROTOTYPE_CHAIN_CAN_BE_SET = arguments[1], // hidden feature, used by unit-test
         RUNNING_ON_NODE = (typeof global !== 'undefined') && (global.window!==window),
         PROTO_SUPPORTED = !!Object.__proto__,
-        itagCore, MUTATION_EVENTS, PROTECTED_MEMBERS, EXTRA_BASE_MEMBERS, Event,
-        registerDelay, focusManager, mergeFlat;
+        itagCore, MUTATION_EVENTS, PROTECTED_MEMBERS, EXTRA_BASE_MEMBERS, Event, IO,
+        ATTRIBUTE_EVENTS, registerDelay, focusManager, mergeFlat;
 
     require('vdom')(window);
     Event = require('event-dom')(window);
+    IO = require('io')(window);
 
 /*jshint boss:true */
     if (itagCore=window._ItagCore) {
@@ -82,11 +65,11 @@ module.exports = function (window) {
     Object.protectedProp(window, 'ITAGS', {}); // for the ProtoConstructors
 
     EXTRA_BASE_MEMBERS = {
-        initUI: function(constructor, noInitCheck) {
+        initUI: function(constructor, reInitialize) {
             var instance = this,
                 vnode = instance.vnode,
                 superInit;
-            if ((noInitCheck || !vnode.ce_initialized) && !vnode.removedFromDOM && !vnode.ce_destroyed) {
+            if ((reInitialize || !vnode.ce_initialized) && !vnode.removedFromDOM && !vnode.ce_destroyed) {
                 superInit = function(constructor) {
                     var classCarierBKP = instance.__classCarier__;
                     if (constructor.$$chainInited) {
@@ -97,16 +80,29 @@ module.exports = function (window) {
                     // don't call `hasOwnProperty` directly on obj --> it might have been overruled
                     Object.prototype.hasOwnProperty.call(constructor.prototype, '_initUI') && constructor.prototype._initUI.call(instance);
                 };
+                if (reInitialize) {
+                    instance.setHTML(vnode.ce_initContent);
+                }
+                else {
+                    // already synced on the server:
+                    // bind the stored json-data on the property `model`:
+                    itagCore.retrieveModel(instance);
+                    Object.protectedProp(vnode, 'ce_initContent', instance.getHTML());
+                }
                 superInit(constructor || instance.constructor);
                 Object.protectedProp(vnode, 'ce_initialized', true);
             }
             return instance;
         },
-        destroyUI: function(constructor, noDestroySet) {
+        destroyUI: function(constructor, reInitialize) {
             var instance = this,
                 vnode = instance.vnode,
-                superDestroy;
-            if (vnode.ce_initialized && (noDestroySet || vnode.removedFromDOM) && !vnode.ce_destroyed) {
+                superDestroy, observer;
+            if (vnode.ce_initialized && (reInitialize || vnode.removedFromDOM) && !vnode.ce_destroyed) {
+                if (!reInitialize && NATIVE_OBJECT_OBSERVE) {
+                    observer = instance.getData('_observer');
+                    observer && Object.unobserve(instance.model, observer);
+                }
                 superDestroy = function(constructor) {
                     var classCarierBKP = instance.__classCarier__;
                     // don't call `hasOwnProperty` directly on obj --> it might have been overruled
@@ -119,15 +115,18 @@ module.exports = function (window) {
                 };
                 superDestroy(constructor || instance.constructor);
                 instance.detachAll();
-                noDestroySet || Object.protectedProp(vnode, 'ce_destroyed', true);
+                reInitialize || Object.protectedProp(vnode, 'ce_destroyed', true);
             }
             return instance;
         },
         syncUI: function() {
             var instance = this,
+                args = instance.args,
                 vnode = instance.vnode;
             if (vnode.ce_initialized && !vnode.removedFromDOM && !vnode.ce_destroyed) {
+                vnode._setUnchangableAttrs(args);
                 instance._syncUI.apply(instance, arguments);
+                vnode._setUnchangableAttrs(null);
             }
             return instance;
         },
@@ -143,13 +142,26 @@ module.exports = function (window) {
         },
         bindModel: function(model) {
             var instance = this,
-                stringifiedData;
+                stringifiedData, prevContent, observer;
+            if (NATIVE_OBJECT_OBSERVE) {
+                observer = instance.getData('_observer');
+                observer && Object.unobserve(instance.model, observer);
+            }
             instance.model = model;
+            if (NATIVE_OBJECT_OBSERVE) {
+                observer = function() {
+                    instance.syncUI();
+                };
+                Object.observe(instance.model, observer);
+                instance.setData('_observer', observer);
+            }
             instance.syncUI();
             if (RUNNING_ON_NODE) {
                 // store the modeldata inside an inner div-node
                 try {
                     stringifiedData = JSON.stringify(model);
+                    prevContent = instance.getElement('span.itag-data');
+                    prevContent && prevContent.remove();
                     instance.prepend('<span class="itag-data">'+stringifiedData+'</span>');
                 }
                 catch(e) {
@@ -163,21 +175,21 @@ module.exports = function (window) {
         _initUI: NOOP,
         _destroyUI: NOOP,
         _syncUI: NOOP,
-        args: {},
+        _args: {},
         _modelToAttrs: function() {
             var instance = this,
-                args = instance.args,
+                args = instance._args,
                 model = instance.model,
                 newAttrs = [];
             args.each(function(value, key) {
                 newAttrs[newAttrs.length] = {name: key, value: model[key]};
             });
-            (newAttrs.length>0) && instance.setAttrs(newAttrs);
+            (newAttrs.length>0) && instance.setAttrs(newAttrs, true);
             return instance;
         },
         _attrsToModel: function() {
             var instance = this,
-                args = instance.args,
+                args = instance._args,
                 model = instance.model,
                 attrValue;
             args.each(function(value, key) {
@@ -208,6 +220,7 @@ module.exports = function (window) {
     });
 
     MUTATION_EVENTS = [NODE_REMOVED, NODE_INSERTED, NODE_CONTENT_CHANGE, ATTRIBUTE_REMOVED, ATTRIBUTE_CHANGED, ATTRIBUTE_INSERTED];
+    ATTRIBUTE_EVENTS = [ATTRIBUTE_REMOVED, ATTRIBUTE_CHANGED, ATTRIBUTE_INSERTED];
 
     mergeFlat = function(constructor, domElement) {
         var prototype = constructor.prototype,
@@ -244,6 +257,26 @@ module.exports = function (window) {
 
     itagCore = {
 
+        DELAYED_FINALIZE_EVENTS: {
+            'mousedown': true,
+            'mouseup': true,
+            'mousemove': true,
+            'panmove': true,
+            'panstart': true,
+            'panleft': true,
+            'panright': true,
+            'panup': true,
+            'pandown': true,
+            'pinchmove': true,
+            'rotatemove': true,
+            // 'focus': true, // focus needs immediate response !
+            'manualfocus': true,
+            // 'keydown': true, // keydown needs immediate response !
+            'keyup': true
+            //'keypress': true, // keypress needs immediate response !
+            //'blur': true, // blur needs immediate response !
+        },
+
         itagFilter: function(e) {
             return e.target.vnode.isItag;
         },
@@ -260,8 +293,16 @@ module.exports = function (window) {
 
         upgradeElement: function(domElement, domElementConstructor) {
             var instance = this,
-                proto = domElementConstructor.prototype;
+                proto = domElementConstructor.prototype,
+                observer;
             domElement.model = {};
+            if (NATIVE_OBJECT_OBSERVE) {
+                observer = function() {
+                    instance.syncUI();
+                };
+                Object.observe(domElement.model, observer);
+                domElement.setData('_observer', observer);
+            }
             if (!PROTO_SUPPORTED) {
                 mergeFlat(domElementConstructor, domElement);
                 domElement.__proto__ = proto;
@@ -319,19 +360,102 @@ module.exports = function (window) {
         },
 
         setRendered: function(domElement) {
-            var instance = this;
-            if (domElement.hasClass(CLASS_ITAG_RENDERED)) {
-                // already synced on the server:
-                // bind the stored json-data on the property `model`:
-                instance.retrieveModel(domElement);
-            }
-            else {
-                // set the class without an event:
-                domElement.setClass(CLASS_ITAG_RENDERED, null, null, true);
-            }
+            domElement.setClass(CLASS_ITAG_RENDERED, null, null, true);
             domElement.setData('itagRendered', true);
             domElement._itagReady || (domElement._itagReady=window.Promise.manage());
             domElement._itagReady.fulfill();
+        },
+
+        setupWatchers: function() {
+            Event.after(
+                NODE_REMOVED,
+                function(e) {
+                    var node = e.target;
+                    node.destroyUI(PROTO_SUPPORTED ? null : node.__proto__.constructor);
+                },
+                itagCore.itagFilter
+            );
+
+            // Always watch for attibute change-events:
+            // this way, we make the itags responsive for manual domchanges.
+            Event.after(
+                ATTRIBUTE_EVENTS,
+                function(e) {
+                    var element = e.target;
+                    element._attrsToModel();
+                    NATIVE_OBJECT_OBSERVE || DOCUMENT.refreshItags();
+                    // this affect modeldata, the event.finalizer will sync the UI
+                    // AFTER synced, we might need to refocus --> that's why refocussing
+                    // is done async.
+                    if (element.hasClass('focussed')) {
+                        asyncSilent(function() {
+                            focusManager(element);
+                        });
+                    }
+                },
+                itagCore.itagFilter
+            );
+
+            if (!NATIVE_OBJECT_OBSERVE) {
+                Event.finalize(function(e) {
+                    var type = e.type;
+                    if (!MUTATION_EVENTS[type] && !type.endsWith('outside')) {
+                        if (itagCore.DELAYED_FINALIZE_EVENTS[type]) {
+                            registerDelay || (registerDelay = laterSilent(function() {
+                                DOCUMENT.refreshItags();
+                                registerDelay = null;
+                            }, DELAYED_EVT_TIME));
+                        }
+                        else {
+                            DOCUMENT.refreshItags();
+                        }
+                    }
+                });
+
+                IO.finalize(function() {
+                    DOCUMENT.refreshItags();
+                });
+
+                // we patch the window timer functions in order to run `refreshItags` afterwards:
+                window._setTimeout = window.setTimeout;
+                window._setInterval = window.setInterval;
+
+                window.setTimeout = function() {
+                    var args = arguments;
+                    args[0] = (function(originalFn) {
+                        return function() {
+                            originalFn();
+                            DOCUMENT.refreshItags();
+                        };
+                    })(args[0]);
+                    window._setTimeout.apply(this, arguments);
+                };
+
+                window.setInterval = function() {
+                    var args = arguments;
+                    args[0] = (function(originalFn) {
+                        return function() {
+                            originalFn();
+                            DOCUMENT.refreshItags();
+                        };
+                    })(args[0]);
+                    window._setInterval.apply(this, arguments);
+                };
+
+                if (typeof window.setImmediate !== 'undefined') {
+                    window._setImmediate = window.setImmediate;
+                    window.setImmediate = function() {
+                        var args = arguments;
+                        args[0] = (function(originalFn) {
+                            return function() {
+                                originalFn();
+                                DOCUMENT.refreshItags();
+                            };
+                        })(args[0]);
+                        window._setImmediate.apply(this, arguments);
+                    };
+                }
+            }
         }
     };
 
@@ -350,14 +474,16 @@ module.exports = function (window) {
 
         FunctionPrototype._mergePrototypes = FunctionPrototype.mergePrototypes;
         FunctionPrototype.mergePrototypes = function(prototypes, force) {
-            var instance = this;
+            var instance = this,
+                silent;
             if (!instance.$$itag) {
                 // default mergePrototypes
                 instance._mergePrototypes.apply(instance, arguments);
             }
             else {
                 instance._mergePrototypes(prototypes, force, ITAG_METHODS, PROTECTED_MEMBERS);
-                Event.emit(instance, 'itag:prototypechanged', {prototypes: prototypes, force: force});
+                silent = arguments[2];
+                silent || Event.emit(instance, 'itag:prototypechanged', {prototypes: prototypes, force: force});
             }
             return instance;
         };
@@ -414,7 +540,7 @@ module.exports = function (window) {
                 domElementConstructor.$$super = baseProt;
                 domElementConstructor.$$orig = {};
 
-                prototypes && domElementConstructor.mergePrototypes(prototypes, true);
+                prototypes && domElementConstructor.mergePrototypes(prototypes, true, true);
                 window.ITAGS[itagName] = domElementConstructor;
 
                 itagCore.renderDomElements(itagName, domElementConstructor);
@@ -524,6 +650,54 @@ module.exports = function (window) {
         };
     }(window.HTMLElement.prototype));
 
+    (function(ElementPrototype) {
+        var setAttributeBKP = ElementPrototype.setAttribute;
+        var removeAttributeBKP = ElementPrototype.removeAttribute;
+
+        ElementPrototype.removeAttribute = function(attributeName) {
+            var instance = this;
+            if (!instance.isItag()) {
+                removeAttributeBKP.apply(instance, arguments);
+            }
+            else {
+                if (instance._args[attributeName]) {
+                    delete instance.model[attributeName];
+                }
+                else {
+                    removeAttributeBKP.apply(instance, arguments);
+                }
+            }
+        };
+        ElementPrototype.setAttribute = function(attributeName, value, silent) {
+            var instance = this,
+                valueType;
+            if (silent || !instance.isItag()) {
+                setAttributeBKP.apply(instance, arguments);
+            }
+            else {
+/*jshint boss:true */
+                if (valueType=instance._args[attributeName]) {
+/*jshint boss:false */
+                    switch (valueType) {
+                        case 'boolean':
+                            value = (value==='true');
+                            break;
+                        case 'number':
+                            value = parseFloat(value);
+                            break;
+                        case 'date':
+                            value = value.toDate();
+                            break;
+                    }
+                    instance.model[attributeName] = value;
+                }
+                else {
+                    setAttributeBKP.apply(instance, arguments);
+                }
+            }
+        };
+    }(window.Element.prototype));
+
     DOCUMENT.refreshItags = function() {
         var list = this.getItags(),
             len = list.length,
@@ -531,8 +705,13 @@ module.exports = function (window) {
         for (i=0; i<len; i++) {
             itagElement = list[i];
             if (itagElement.isRendered && itagElement.isRendered()) {
+
+// console.info('refreshItags before: '+JSON.stringify(itagElement.model));
+
                 itagElement._modelToAttrs();
                 itagElement.syncUI();
+
+// console.info('refreshItags after: '+JSON.stringify(itagElement.model));
                 itagElement.hasClass('focussed') && focusManager(itagElement);
             }
         }
@@ -590,85 +769,7 @@ module.exports = function (window) {
         );
     }
 
-
-
-    Event.after(
-        [ATTRIBUTE_CHANGED, ATTRIBUTE_INSERTED, ATTRIBUTE_REMOVED],
-        function(e) {
-            var element = e.target;
-            element._attrsToModel();
-            // this affect modeldata, the event.fiilizer will sync the UI
-            // AFTER synced, we might need to refocus --> that's why refocussing
-            // is done async.
-            if (element.hasClass('focussed')) {
-                asyncSilent(function() {
-                    focusManager(element);
-                });
-            }
-        },
-        itagCore.itagFilter
-    );
-
-    Event.after(
-        NODE_REMOVED,
-        function(e) {
-            var node = e.target;
-            (typeof node.destroyUI==='function') && node.destroyUI(PROTO_SUPPORTED ? null : node.__proto__.constructor);
-        },
-        itagCore.itagFilter
-    );
-
-    Event.finalize(function(e) {
-        if (DELAYED_FINALIZE_EVENTS[e.type]) {
-            registerDelay || (registerDelay = laterSilent(function() {
-                DOCUMENT.refreshItags();
-                registerDelay = null;
-            }, DELAYED_EVT_TIME));
-        }
-        else {
-            DOCUMENT.refreshItags();
-        }
-    });
-
-    // we patch the window timer functions in order to run `refreshItags` afterwards:
-    window._setTimeout = window.setTimeout;
-    window._setInterval = window.setInterval;
-
-    window.setTimeout = function() {
-        var args = arguments;
-        args[0] = (function(originalFn) {
-            return function() {
-                originalFn();
-                DOCUMENT.refreshItags();
-            };
-        })(args[0]);
-        window._setTimeout.apply(this, arguments);
-    };
-
-    window.setInterval = function() {
-        var args = arguments;
-        args[0] = (function(originalFn) {
-            return function() {
-                originalFn();
-                DOCUMENT.refreshItags();
-            };
-        })(args[0]);
-        window._setInterval.apply(this, arguments);
-    };
-
-    if (typeof window.setImmediate !== 'undefined') {
-        window._setImmediate = window.setImmediate;
-        window.setImmediate = function() {
-            var args = arguments;
-            args[0] = (function(originalFn) {
-                return function() {
-                    originalFn();
-                    DOCUMENT.refreshItags();
-                };
-            })(args[0]);
-            window._setImmediate.apply(this, arguments);
-        };
-    }
+    itagCore.setupWatchers();
 
     Object.protectedProp(window, '_ItagCore', itagCore);
 
