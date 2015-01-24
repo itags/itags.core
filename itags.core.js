@@ -6,7 +6,8 @@
 require('polyfill/polyfill-base.js');
 require('./css/itags.core.css');
 
-var jsExt = require('js-ext/js-ext.js'), // want the full version: include it at the top, so that object.merge is available
+var NAME = '[itags.core]: ',
+    jsExt = require('js-ext/js-ext.js'), // want the full version: include it at the top, so that object.merge is available
     createHashMap = require('js-ext/extra/hashmap.js').createMap,
     asyncSilent = require('utils').asyncSilent,
     laterSilent = require('utils').laterSilent,
@@ -43,13 +44,15 @@ var jsExt = require('js-ext/js-ext.js'), // want the full version: include it at
     NOOP = function() {};
 
 module.exports = function (window) {
-NATIVE_OBJECT_OBSERVE=false;
+// NATIVE_OBJECT_OBSERVE=false;
 
     var DOCUMENT = window.document,
         PROTOTYPE_CHAIN_CAN_BE_SET = arguments[1], // hidden feature, used by unit-test
         RUNNING_ON_NODE = (typeof global !== 'undefined') && (global.window!==window),
         PROTO_SUPPORTED = !!Object.__proto__,
+        allowedToRefreshItags = true,
         itagCore, MUTATION_EVENTS, PROTECTED_MEMBERS, EXTRA_BASE_MEMBERS, Event, IO,
+        setTimeoutBKP, setIntervalBKP, setImmediateBKP,
         ATTRIBUTE_EVENTS, registerDelay, focusManager, mergeFlat;
 
     require('vdom')(window);
@@ -150,6 +153,7 @@ NATIVE_OBJECT_OBSERVE=false;
             instance.model = model;
             if (NATIVE_OBJECT_OBSERVE) {
                 observer = function() {
+                    itagCore.modelToAttrs(instance);
                     instance.syncUI();
                 };
                 Object.observe(instance.model, observer);
@@ -175,40 +179,7 @@ NATIVE_OBJECT_OBSERVE=false;
         _initUI: NOOP,
         _destroyUI: NOOP,
         _syncUI: NOOP,
-        _args: {},
-        _modelToAttrs: function() {
-            var instance = this,
-                args = instance._args,
-                model = instance.model,
-                newAttrs = [];
-            args.each(function(value, key) {
-                newAttrs[newAttrs.length] = {name: key, value: model[key]};
-            });
-            (newAttrs.length>0) && instance.setAttrs(newAttrs, true);
-            return instance;
-        },
-        _attrsToModel: function() {
-            var instance = this,
-                args = instance._args,
-                model = instance.model,
-                attrValue;
-            args.each(function(value, key) {
-                attrValue = instance.getAttr(key);
-                switch (value) {
-                    case 'boolean':
-                        attrValue = (attrValue==='true');
-                        break;
-                    case 'number':
-                        attrValue = parseFloat(attrValue);
-                        break;
-                    case 'date':
-                        attrValue = attrValue.toDate();
-                        break;
-                }
-                model[key] = attrValue;
-            });
-            return instance;
-        },
+        _args: {}
     };
 
     EXTRA_BASE_MEMBERS.merge(Event.Listener)
@@ -282,7 +253,8 @@ NATIVE_OBJECT_OBSERVE=false;
         },
 
         renderDomElements: function(itagName, domElementConstructor) {
-            var itagElements = DOCUMENT.getAll(itagName),
+            var pseudo = domElementConstructor.$$pseudo,
+                itagElements = pseudo ? DOCUMENT.getAll(itagName+'[is="'+pseudo+'"]') : DOCUMENT.getAll(itagName+':not([is])'),
                 len = itagElements.length,
                 i, itagElement;
             for (i=0; i<len; i++) {
@@ -296,13 +268,6 @@ NATIVE_OBJECT_OBSERVE=false;
                 proto = domElementConstructor.prototype,
                 observer;
             domElement.model = {};
-            if (NATIVE_OBJECT_OBSERVE) {
-                observer = function() {
-                    instance.syncUI();
-                };
-                Object.observe(domElement.model, observer);
-                domElement.setData('_observer', observer);
-            }
             if (!PROTO_SUPPORTED) {
                 mergeFlat(domElementConstructor, domElement);
                 domElement.__proto__ = proto;
@@ -335,9 +300,17 @@ NATIVE_OBJECT_OBSERVE=false;
             // sync, but do this after the element is created:
             // in the next eventcycle:
             asyncSilent(function(){
-                domElement._attrsToModel();
+                instance.attrsToModel(domElement);
                 domElement.initUI(PROTO_SUPPORTED ? null : domElementConstructor);
                 domElement.syncUI();
+                if (NATIVE_OBJECT_OBSERVE) {
+                    observer = function() {
+                        instance.modelToAttrs(domElement);
+                        domElement.syncUI();
+                    };
+                    Object.observe(domElement.model, observer);
+                    domElement.setData('_observer', observer);
+                }
                 instance.setRendered(domElement);
             });
         },
@@ -367,6 +340,8 @@ NATIVE_OBJECT_OBSERVE=false;
         },
 
         setupWatchers: function() {
+            var instance = this;
+
             Event.after(
                 NODE_REMOVED,
                 function(e) {
@@ -382,7 +357,7 @@ NATIVE_OBJECT_OBSERVE=false;
                 ATTRIBUTE_EVENTS,
                 function(e) {
                     var element = e.target;
-                    element._attrsToModel();
+                    instance.attrsToModel(element);
                     NATIVE_OBJECT_OBSERVE || DOCUMENT.refreshItags();
                     // this affect modeldata, the event.finalizer will sync the UI
                     // AFTER synced, we might need to refocus --> that's why refocussing
@@ -399,63 +374,111 @@ NATIVE_OBJECT_OBSERVE=false;
             if (!NATIVE_OBJECT_OBSERVE) {
                 Event.finalize(function(e) {
                     var type = e.type;
-                    if (!MUTATION_EVENTS[type] && !type.endsWith('outside')) {
-                        if (itagCore.DELAYED_FINALIZE_EVENTS[type]) {
-                            registerDelay || (registerDelay = laterSilent(function() {
+                    if (allowedToRefreshItags) {
+                        if (!MUTATION_EVENTS[type] && !type.endsWith('outside')) {
+                            if (itagCore.DELAYED_FINALIZE_EVENTS[type]) {
+                                registerDelay || (registerDelay = laterSilent(function() {
+                                    DOCUMENT.refreshItags();
+                                    registerDelay = null;
+                                }, DELAYED_EVT_TIME));
+                            }
+                            else {
                                 DOCUMENT.refreshItags();
-                                registerDelay = null;
-                            }, DELAYED_EVT_TIME));
-                        }
-                        else {
-                            DOCUMENT.refreshItags();
+                            }
                         }
                     }
                 });
 
                 IO.finalize(function() {
-                    DOCUMENT.refreshItags();
+                    allowedToRefreshItags && DOCUMENT.refreshItags();
                 });
 
                 // we patch the window timer functions in order to run `refreshItags` afterwards:
-                window._setTimeout = window.setTimeout;
-                window._setInterval = window.setInterval;
+                setTimeoutBKP = window.setTimeout;
+                setIntervalBKP = window.setInterval;
 
                 window.setTimeout = function() {
                     var args = arguments;
-                    args[0] = (function(originalFn) {
-                        return function() {
-                            originalFn();
-                            DOCUMENT.refreshItags();
-                        };
-                    })(args[0]);
-                    window._setTimeout.apply(this, arguments);
-                };
-
-                window.setInterval = function() {
-                    var args = arguments;
-                    args[0] = (function(originalFn) {
-                        return function() {
-                            originalFn();
-                            DOCUMENT.refreshItags();
-                        };
-                    })(args[0]);
-                    window._setInterval.apply(this, arguments);
-                };
-
-                if (typeof window.setImmediate !== 'undefined') {
-                    window._setImmediate = window.setImmediate;
-                    window.setImmediate = function() {
-                        var args = arguments;
+                    if (allowedToRefreshItags) {
                         args[0] = (function(originalFn) {
                             return function() {
                                 originalFn();
                                 DOCUMENT.refreshItags();
                             };
                         })(args[0]);
-                        window._setImmediate.apply(this, arguments);
+                    }
+                    setTimeoutBKP.apply(this, arguments);
+                };
+
+                window.setInterval = function() {
+                    var args = arguments;
+                    if (allowedToRefreshItags) {
+                        args[0] = (function(originalFn) {
+                            return function() {
+                                originalFn();
+                                DOCUMENT.refreshItags();
+                            };
+                        })(args[0]);
+                    }
+                    setIntervalBKP.apply(this, arguments);
+                };
+
+                if (typeof window.setImmediate !== 'undefined') {
+                    setImmediateBKP = window.setInterval;
+                    window.setImmediate = function() {
+                        var args = arguments;
+                        if (allowedToRefreshItags) {
+                            args[0] = (function(originalFn) {
+                                return function() {
+                                    originalFn();
+                                    DOCUMENT.refreshItags();
+                                };
+                            })(args[0]);
+                        }
+                        setImmediateBKP.apply(this, arguments);
                     };
                 }
             }
+        },
+
+        setupEmitters: function() {
+            Event.defineEvent('itag:changed')
+                 .unPreventable()
+                 .noRender();
+            Event.after(NODE_CONTENT_CHANGE, function(e) {
+                Event.emit(e.target, 'itag:changed');
+            }, this.itagFilter);
+        },
+
+        modelToAttrs: function(domElement) {
+            var args = domElement._args,
+                model = domElement.model,
+                newAttrs = [];
+            args.each(function(value, key) {
+                newAttrs[newAttrs.length] = {name: key, value: model[key]};
+            });
+            (newAttrs.length>0) && domElement.setAttrs(newAttrs, true);
+        },
+
+        attrsToModel: function(domElement) {
+            var args = domElement._args,
+                model = domElement.model,
+                attrValue;
+            args.each(function(value, key) {
+                attrValue = domElement.getAttr(key);
+                switch (value) {
+                    case 'boolean':
+                        attrValue = (attrValue==='true');
+                        break;
+                    case 'number':
+                        attrValue = parseFloat(attrValue);
+                        break;
+                    case 'date':
+                        attrValue = attrValue.toDate();
+                        break;
+                }
+                model[key] = attrValue;
+            });
         }
     };
 
@@ -502,9 +525,26 @@ NATIVE_OBJECT_OBSERVE=false;
             return instance;
         };
 
+        FunctionPrototype.pseudoClass = function(pseudo , prototypes, chainInit, chainDestroy) {
+            var instance = this;
+            if (!instance.$$itag) {
+                console.warn(NAME, 'cannot pseudoClass '+pseudo+' for its Parent is no Itag-Class');
+                return instance;
+            }
+            if (typeof pseudo !== 'string') {
+                console.warn(NAME, 'cannot pseudoClass --> first argument needs to be s String');
+                return instance;
+            }
+            if (pseudo.contains('-')) {
+                console.warn(NAME, 'cannot pseudoClass '+pseudo+' --> name cannot consist a minus-token');
+                return instance;
+            }
+            return instance.subClass(instance.$$itag+':'+pseudo , prototypes, chainInit, chainDestroy);
+        };
+
         FunctionPrototype.subClass = function(constructor, prototypes, chainInit, chainDestroy) {
             var instance = this,
-                baseProt, proto, domElementConstructor, itagName;
+                baseProt, proto, domElementConstructor, itagName, pseudo, registerName, itagNameSplit;
             if (typeof constructor === 'string') {
                 // Itag subclassing
                 if (typeof prototypes === 'boolean') {
@@ -516,9 +556,17 @@ NATIVE_OBJECT_OBSERVE=false;
                 (typeof chainDestroy === 'boolean') || (chainDestroy=DEFAULT_CHAIN_DESTROY);
 
                 itagName = constructor.toLowerCase();
+                if (!itagName.startsWith('i-')) {
+                    console.warn(NAME, 'invalid itagname '+itagName+' --> name should start with i-');
+                    return instance;
+                }
                 if (window.ITAGS[itagName]) {
                     console.warn(itagName+' already exists: it will be redefined');
                 }
+                registerName = itagName;
+                itagNameSplit = itagName.split(':');
+                itagName = itagNameSplit[0];
+                pseudo = itagNameSplit[1]; // may be undefined
 
                 // if instance.isItag, then we subclass an existing i-tag
                 baseProt = instance.prototype;
@@ -527,6 +575,7 @@ NATIVE_OBJECT_OBSERVE=false;
                 // merge some system function in case they don't exists
                 domElementConstructor = function() {
                     var domElement = DOCUMENT._createElement(itagName);
+                    pseudo && domElement.vnode._setAttr('is', pseudo, true);
                     itagCore.upgradeElement(domElement, domElementConstructor);
                     return domElement;
                 };
@@ -535,13 +584,14 @@ NATIVE_OBJECT_OBSERVE=false;
 
                 proto.constructor = domElementConstructor;
                 domElementConstructor.$$itag = itagName;
+                domElementConstructor.$$pseudo = pseudo;
                 domElementConstructor.$$chainInited = chainInit ? true : false;
                 domElementConstructor.$$chainDestroyed = chainDestroy ? true : false;
                 domElementConstructor.$$super = baseProt;
                 domElementConstructor.$$orig = {};
 
                 prototypes && domElementConstructor.mergePrototypes(prototypes, true, true);
-                window.ITAGS[itagName] = domElementConstructor;
+                window.ITAGS[registerName] = domElementConstructor;
 
                 itagCore.renderDomElements(itagName, domElementConstructor);
 
@@ -702,19 +752,16 @@ NATIVE_OBJECT_OBSERVE=false;
         var list = this.getItags(),
             len = list.length,
             i, itagElement;
+        allowedToRefreshItags = false; // prevent setTimeout to fall into loop
         for (i=0; i<len; i++) {
             itagElement = list[i];
             if (itagElement.isRendered && itagElement.isRendered()) {
-
-// console.info('refreshItags before: '+JSON.stringify(itagElement.model));
-
-                itagElement._modelToAttrs();
+                itagCore.modelToAttrs(itagElement);
                 itagElement.syncUI();
-
-// console.info('refreshItags after: '+JSON.stringify(itagElement.model));
                 itagElement.hasClass('focussed') && focusManager(itagElement);
             }
         }
+        allowedToRefreshItags = true;
     };
 
 
@@ -770,6 +817,8 @@ NATIVE_OBJECT_OBSERVE=false;
     }
 
     itagCore.setupWatchers();
+
+    itagCore.setupEmitters();
 
     Object.protectedProp(window, '_ItagCore', itagCore);
 
