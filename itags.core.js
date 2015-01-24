@@ -1,6 +1,20 @@
 
 /*jshint proto:true */
 
+/**
+ * Provides several methods that override native Element-methods to work with the vdom.
+ *
+ *
+ * <i>Copyright (c) 2014 ITSA - https://github.com/itsa</i>
+ * <br>
+ * New BSD License - http://choosealicense.com/licenses/bsd-3-clause/
+ *
+ * @module vdom
+ * @submodule extend-element
+ * @class Element
+ * @since 0.0.1
+*/
+
 "use strict";
 
 require('polyfill/polyfill-base.js');
@@ -32,14 +46,14 @@ var NAME = '[itags.core]: ',
         init: '_initUI',
         sync: '_syncUI',
         destroy: '_destroyUI',
-        args: '_args'
+        attrs: '_attrs'
     }),
     // ITAG_METHOD_VALUES must match previous ITAG_METHODS's values!
     ITAG_METHOD_VALUES = createHashMap({
         _initUI: true,
         _syncUI: true,
         _destroyUI: true,
-        _args: true
+        _attrs: true
     }),
     NOOP = function() {};
 
@@ -65,84 +79,51 @@ module.exports = function (window) {
         return itagCore; // itagCore was already defined
     }
 
+    /*
+     * Internal hash containing all DOM-events that are listened for (at `document`).
+     *
+     * DOMEvents = {
+     *     'click': callbackFn,
+     *     'mousemove': callbackFn,
+     *     'keypress': callbackFn
+     * }
+     *
+     * @property DOMEvents
+     * @default {}
+     * @type Object
+     * @private
+     * @since 0.0.1
+    */
     Object.protectedProp(window, 'ITAGS', {}); // for the ProtoConstructors
 
+    /*
+     * Internal hash containing all DOM-events that are listened for (at `document`).
+     *
+     * DOMEvents = {
+     *     'click': callbackFn,
+     *     'mousemove': callbackFn,
+     *     'keypress': callbackFn
+     * }
+     *
+     * @property DOMEvents
+     * @default {}
+     * @type Object
+     * @private
+     * @since 0.0.1
+    */
     EXTRA_BASE_MEMBERS = {
-        initUI: function(constructor, reInitialize) {
-            var instance = this,
-                vnode = instance.vnode,
-                superInit;
-            if ((reInitialize || !vnode.ce_initialized) && !vnode.removedFromDOM && !vnode.ce_destroyed) {
-                superInit = function(constructor) {
-                    var classCarierBKP = instance.__classCarier__;
-                    if (constructor.$$chainInited) {
-                        instance.__classCarier__ = constructor.$$super.constructor;
-                        superInit(constructor.$$super.constructor);
-                    }
-                    classCarierBKP = instance.__classCarier__;
-                    // don't call `hasOwnProperty` directly on obj --> it might have been overruled
-                    Object.prototype.hasOwnProperty.call(constructor.prototype, '_initUI') && constructor.prototype._initUI.call(instance);
-                };
-                if (reInitialize) {
-                    instance.setHTML(vnode.ce_initContent);
-                }
-                else {
-                    // already synced on the server:
-                    // bind the stored json-data on the property `model`:
-                    itagCore.retrieveModel(instance);
-                    Object.protectedProp(vnode, 'ce_initContent', instance.getHTML());
-                }
-                superInit(constructor || instance.constructor);
-                Object.protectedProp(vnode, 'ce_initialized', true);
-            }
-            return instance;
-        },
-        destroyUI: function(constructor, reInitialize) {
-            var instance = this,
-                vnode = instance.vnode,
-                superDestroy, observer;
-            if (vnode.ce_initialized && (reInitialize || vnode.removedFromDOM) && !vnode.ce_destroyed) {
-                if (!reInitialize && NATIVE_OBJECT_OBSERVE) {
-                    observer = instance.getData('_observer');
-                    observer && Object.unobserve(instance.model, observer);
-                }
-                superDestroy = function(constructor) {
-                    var classCarierBKP = instance.__classCarier__;
-                    // don't call `hasOwnProperty` directly on obj --> it might have been overruled
-                    Object.prototype.hasOwnProperty.call(constructor.prototype, '_destroyUI') && constructor.prototype._destroyUI.call(instance);
-                    if (constructor.$$chainDestroyed) {
-                        instance.__classCarier__ = constructor.$$super.constructor;
-                        superDestroy(constructor.$$super.constructor);
-                    }
-                    classCarierBKP = instance.__classCarier__;
-                };
-                superDestroy(constructor || instance.constructor);
-                instance.detachAll();
-                reInitialize || Object.protectedProp(vnode, 'ce_destroyed', true);
-            }
-            return instance;
-        },
-        syncUI: function() {
-            var instance = this,
-                args = instance.args,
-                vnode = instance.vnode;
-            if (vnode.ce_initialized && !vnode.removedFromDOM && !vnode.ce_destroyed) {
-                vnode._setUnchangableAttrs(args);
-                instance._syncUI.apply(instance, arguments);
-                vnode._setUnchangableAttrs(null);
-            }
-            return instance;
-        },
-        reInitializeUI: function(constructor) {
-            var instance = this,
-                vnode = instance.vnode;
-            if (vnode.ce_initialized && !vnode.removedFromDOM && !vnode.ce_destroyed) {
-                instance.destroyUI(constructor, true)
-                        .initUI(constructor, true)
-                        .syncUI();
-            }
-            return instance;
-        },
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
         bindModel: function(model) {
             var instance = this,
                 stringifiedData, prevContent, observer;
@@ -173,26 +154,270 @@ module.exports = function (window) {
                 }
             }
         },
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
+        destroyUI: function(constructor, reInitialize) {
+            var instance = this,
+                vnode = instance.vnode,
+                superDestroy, observer;
+            if (vnode.ce_initialized && (reInitialize || vnode.removedFromDOM) && !vnode.ce_destroyed) {
+                if (!reInitialize && NATIVE_OBJECT_OBSERVE) {
+                    observer = instance.getData('_observer');
+                    observer && Object.unobserve(instance.model, observer);
+                }
+                superDestroy = function(constructor) {
+                    var classCarierBKP = instance.__classCarier__;
+                    // don't call `hasOwnProperty` directly on obj --> it might have been overruled
+                    Object.prototype.hasOwnProperty.call(constructor.prototype, '_destroyUI') && constructor.prototype._destroyUI.call(instance);
+                    if (constructor.$$chainDestroyed) {
+                        instance.__classCarier__ = constructor.$$super.constructor;
+                        superDestroy(constructor.$$super.constructor);
+                    }
+                    classCarierBKP = instance.__classCarier__;
+                };
+                superDestroy(constructor || instance.constructor);
+                instance.detachAll();
+                reInitialize || Object.protectedProp(vnode, 'ce_destroyed', true);
+            }
+            return instance;
+        },
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
+        initUI: function(constructor, reInitialize) {
+            var instance = this,
+                vnode = instance.vnode,
+                superInit;
+            if ((reInitialize || !vnode.ce_initialized) && !vnode.removedFromDOM && !vnode.ce_destroyed) {
+                superInit = function(constructor) {
+                    var classCarierBKP = instance.__classCarier__;
+                    if (constructor.$$chainInited) {
+                        instance.__classCarier__ = constructor.$$super.constructor;
+                        superInit(constructor.$$super.constructor);
+                    }
+                    classCarierBKP = instance.__classCarier__;
+                    // don't call `hasOwnProperty` directly on obj --> it might have been overruled
+                    Object.prototype.hasOwnProperty.call(constructor.prototype, '_initUI') && constructor.prototype._initUI.call(instance);
+                };
+                if (reInitialize) {
+                    instance.setHTML(vnode.ce_initContent);
+                }
+                else {
+                    // already synced on the server:
+                    // bind the stored json-data on the property `model`:
+                    itagCore.retrieveModel(instance);
+                    Object.protectedProp(vnode, 'ce_initContent', instance.getHTML());
+                }
+                superInit(constructor || instance.constructor);
+                Object.protectedProp(vnode, 'ce_initialized', true);
+            }
+            return instance;
+        },
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
         isRendered: function() {
             return !!this.getData('itagRendered');
         },
-        _initUI: NOOP,
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
+        reInitializeUI: function(constructor) {
+            var instance = this,
+                vnode = instance.vnode;
+            if (vnode.ce_initialized && !vnode.removedFromDOM && !vnode.ce_destroyed) {
+                instance.destroyUI(constructor, true)
+                        .initUI(constructor, true)
+                        .syncUI();
+            }
+            return instance;
+        },
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
+        syncUI: function() {
+            var instance = this,
+                attrs = instance._attrs,
+                vnode = instance.vnode;
+            if (vnode.ce_initialized && !vnode.removedFromDOM && !vnode.ce_destroyed) {
+                vnode._setUnchangableAttrs(attrs);
+                instance._syncUI.apply(instance, arguments);
+                vnode._setUnchangableAttrs(null);
+            }
+            return instance;
+        },
+        /*
+         * Internal hash containing all DOM-events that are listened for (at `document`).
+         *
+         * DOMEvents = {
+         *     'click': callbackFn,
+         *     'mousemove': callbackFn,
+         *     'keypress': callbackFn
+         * }
+         *
+         * @property DOMEvents
+         * @default {}
+         * @type Object
+         * @private
+         * @since 0.0.1
+        */
+        _attrs: {},
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
         _destroyUI: NOOP,
-        _syncUI: NOOP,
-        _args: {}
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
+        _initUI: NOOP,
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
+        _syncUI: NOOP
     };
 
     EXTRA_BASE_MEMBERS.merge(Event.Listener)
                       .merge(Event._CE_listener);
 
+    /*
+     * Internal hash containing all DOM-events that are listened for (at `document`).
+     *
+     * DOMEvents = {
+     *     'click': callbackFn,
+     *     'mousemove': callbackFn,
+     *     'keypress': callbackFn
+     * }
+     *
+     * @property DOMEvents
+     * @default {}
+     * @type Object
+     * @private
+     * @since 0.0.1
+    */
     PROTECTED_MEMBERS = createHashMap();
     EXTRA_BASE_MEMBERS.each(function(value, key) {
         ITAG_METHOD_VALUES[key] || (PROTECTED_MEMBERS[key] = true);
     });
 
+    /*
+     * Internal hash containing all DOM-events that are listened for (at `document`).
+     *
+     * DOMEvents = {
+     *     'click': callbackFn,
+     *     'mousemove': callbackFn,
+     *     'keypress': callbackFn
+     * }
+     *
+     * @property DOMEvents
+     * @default {}
+     * @type Object
+     * @private
+     * @since 0.0.1
+    */
     MUTATION_EVENTS = [NODE_REMOVED, NODE_INSERTED, NODE_CONTENT_CHANGE, ATTRIBUTE_REMOVED, ATTRIBUTE_CHANGED, ATTRIBUTE_INSERTED];
+
+    /*
+     * Internal hash containing all DOM-events that are listened for (at `document`).
+     *
+     * DOMEvents = {
+     *     'click': callbackFn,
+     *     'mousemove': callbackFn,
+     *     'keypress': callbackFn
+     * }
+     *
+     * @property DOMEvents
+     * @default {}
+     * @type Object
+     * @private
+     * @since 0.0.1
+    */
     ATTRIBUTE_EVENTS = [ATTRIBUTE_REMOVED, ATTRIBUTE_CHANGED, ATTRIBUTE_INSERTED];
 
+   /**
+    * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+    * definition replaces any previous nodes. (without touching unmodified nodes).
+    *
+    * Syncs the new vnode's childNodes with the dom.
+    *
+    * @method _setChildNodes
+    * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+    * @private
+    * @chainable
+    * @since 0.0.1
+    */
     mergeFlat = function(constructor, domElement) {
         var prototype = constructor.prototype,
             keys, i, name, propDescriptor;
@@ -221,13 +446,54 @@ module.exports = function (window) {
         }
     };
 
+   /**
+    * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+    * definition replaces any previous nodes. (without touching unmodified nodes).
+    *
+    * Syncs the new vnode's childNodes with the dom.
+    *
+    * @method _setChildNodes
+    * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+    * @private
+    * @chainable
+    * @since 0.0.1
+    */
     focusManager = function(element) {
         var focusManagerNode = element.getElement('[focusmanager].focussed');
         focusManagerNode && focusManagerNode.focus();
     };
 
+    /*
+     * Internal hash containing all DOM-events that are listened for (at `document`).
+     *
+     * DOMEvents = {
+     *     'click': callbackFn,
+     *     'mousemove': callbackFn,
+     *     'keypress': callbackFn
+     * }
+     *
+     * @property DOMEvents
+     * @default {}
+     * @type Object
+     * @private
+     * @since 0.0.1
+    */
     itagCore = {
-
+        /*
+         * Internal hash containing all DOM-events that are listened for (at `document`).
+         *
+         * DOMEvents = {
+         *     'click': callbackFn,
+         *     'mousemove': callbackFn,
+         *     'keypress': callbackFn
+         * }
+         *
+         * @property DOMEvents
+         * @default {}
+         * @type Object
+         * @private
+         * @since 0.0.1
+        */
         DELAYED_FINALIZE_EVENTS: {
             'mousedown': true,
             'mouseup': true,
@@ -248,10 +514,90 @@ module.exports = function (window) {
             //'blur': true, // blur needs immediate response !
         },
 
-        itagFilter: function(e) {
-            return e.target.vnode.isItag;
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
+        attrsToModel: function(domElement) {
+            var attrs = domElement._attrs,
+                model = domElement.model,
+                attrValue;
+            attrs.each(function(value, key) {
+                attrValue = domElement.getAttr(key);
+                switch (value) {
+                    case 'boolean':
+                        attrValue = (attrValue==='true');
+                        break;
+                    case 'number':
+                        attrValue = parseFloat(attrValue);
+                        break;
+                    case 'date':
+                        attrValue = attrValue.toDate();
+                        break;
+                }
+                model[key] = attrValue;
+            });
         },
 
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
+        itagFilter: function(e) {
+            var node = e.target;
+            return node.vnode.isItag && node.getData('itagRendered');
+        },
+
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
+        modelToAttrs: function(domElement) {
+            var attrs = domElement._attrs,
+                model = domElement.model,
+                newAttrs = [];
+            attrs.each(function(value, key) {
+                newAttrs[newAttrs.length] = {name: key, value: model[key]};
+            });
+            (newAttrs.length>0) && domElement.setAttrs(newAttrs, true);
+        },
+
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
         renderDomElements: function(itagName, domElementConstructor) {
             var pseudo = domElementConstructor.$$pseudo,
                 itagElements = pseudo ? DOCUMENT.getAll(itagName+'[is="'+pseudo+'"]') : DOCUMENT.getAll(itagName+':not([is])'),
@@ -263,58 +609,18 @@ module.exports = function (window) {
             }
         },
 
-        upgradeElement: function(domElement, domElementConstructor) {
-            var instance = this,
-                proto = domElementConstructor.prototype,
-                observer;
-            domElement.model = {};
-            if (!PROTO_SUPPORTED) {
-                mergeFlat(domElementConstructor, domElement);
-                domElement.__proto__ = proto;
-                domElement.__classCarier__ = domElementConstructor;
-                domElement.after('itag:prototypechanged', function(e) {
-                    var prototypes = e.prototypes;
-                    mergeFlat(domElementConstructor, domElement);
-                    if ('init' in prototypes) {
-                        domElement.reInitializeUI(domElement.__proto__.constructor);
-                    }
-                    else if ('sync' in prototypes) {
-                        domElement.syncUI();
-                    }
-                });
-                domElement.after('itag:prototyperemoved', function(e) {
-                    var properties = e.properties;
-                    mergeFlat(domElementConstructor, domElement);
-                    if (properties.contains('init')) {
-                        domElement.reInitializeUI(domElement.__proto__.constructor);
-                    }
-                    else if (properties.contains('sync')) {
-                        domElement.syncUI();
-                    }
-                });
-            }
-            else {
-                domElement.__proto__ = proto;
-                domElement.__classCarier__ = domElementConstructor;
-            }
-            // sync, but do this after the element is created:
-            // in the next eventcycle:
-            asyncSilent(function(){
-                instance.attrsToModel(domElement);
-                domElement.initUI(PROTO_SUPPORTED ? null : domElementConstructor);
-                domElement.syncUI();
-                if (NATIVE_OBJECT_OBSERVE) {
-                    observer = function() {
-                        instance.modelToAttrs(domElement);
-                        domElement.syncUI();
-                    };
-                    Object.observe(domElement.model, observer);
-                    domElement.setData('_observer', observer);
-                }
-                instance.setRendered(domElement);
-            });
-        },
-
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
         retrieveModel: function(domElement) {
             // try to load the model from a stored inner div-node
             var dataNode = domElement.getElement('span.itag-data'),
@@ -332,6 +638,18 @@ module.exports = function (window) {
             return domElement.model;
         },
 
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
         setRendered: function(domElement) {
             domElement.setClass(CLASS_ITAG_RENDERED, null, null, true);
             domElement.setData('itagRendered', true);
@@ -339,6 +657,47 @@ module.exports = function (window) {
             domElement._itagReady.fulfill();
         },
 
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
+        setupEmitters: function() {
+            Event.defineEvent('itag:changed')
+                 .unPreventable()
+                 .noRender();
+            Event.after(NODE_CONTENT_CHANGE, function(e) {
+                /**
+                * Emitted when a draggable gets dropped inside a dropzone.
+                *
+                * @event *:dropzone-drop
+                * @param e {Object} eventobject including:
+                * @param e.target {HtmlElement} the dropzone
+                * @since 0.1
+                */
+                Event.emit(e.target, 'itag:changed', {model: e.target.model});
+            }, this.itagFilter);
+        },
+
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
         setupWatchers: function() {
             var instance = this;
 
@@ -439,50 +798,149 @@ module.exports = function (window) {
                     };
                 }
             }
+
+            if (PROTO_SUPPORTED) {
+                Event.after(
+                    'itag:prototypechanged',
+                    function(e) {
+                        var prototypes = e.prototypes,
+                            ItagClass = e.target,
+                            nodeList, node, i, length;
+                        if ('init' in prototypes) {
+                            nodeList = DOCUMENT.getAll(ItagClass.$$itag+'.'+CLASS_ITAG_RENDERED, true);
+                            length = nodeList.length;
+                            for (i=0; i<length; i++) {
+                                node = nodeList[i];
+                                node.reInitializeUI();
+                            }
+                        }
+                        else if ('sync' in prototypes) {
+                            nodeList = DOCUMENT.getAll(ItagClass.$$itag+'.'+CLASS_ITAG_RENDERED, true);
+                            length = nodeList.length;
+                            for (i=0; i<length; i++) {
+                                node = nodeList[i];
+                                node.syncUI();
+                            }
+                        }
+                    }
+                );
+                Event.after(
+                    'itag:prototyperemoved',
+                    function(e) {
+                        var properties = e.properties,
+                            ItagClass = e.target,
+                            nodeList, node, i, length;
+                        if (properties.contains('init')) {
+                            nodeList = DOCUMENT.getAll(ItagClass.$$itag+'.'+CLASS_ITAG_RENDERED, true);
+                            length = nodeList.length;
+                            for (i=0; i<length; i++) {
+                                node = nodeList[i];
+                                node.reInitializeUI();
+                            }
+                        }
+                        else if (properties.contains('sync')) {
+                            nodeList = DOCUMENT.getAll(ItagClass.$$itag+'.'+CLASS_ITAG_RENDERED, true);
+                            length = nodeList.length;
+                            for (i=0; i<length; i++) {
+                                node = nodeList[i];
+                                node.syncUI();
+                            }
+                        }
+                    }
+                );
+            }
         },
 
-        setupEmitters: function() {
-            Event.defineEvent('itag:changed')
-                 .unPreventable()
-                 .noRender();
-            Event.after(NODE_CONTENT_CHANGE, function(e) {
-                Event.emit(e.target, 'itag:changed');
-            }, this.itagFilter);
-        },
-
-        modelToAttrs: function(domElement) {
-            var args = domElement._args,
-                model = domElement.model,
-                newAttrs = [];
-            args.each(function(value, key) {
-                newAttrs[newAttrs.length] = {name: key, value: model[key]};
-            });
-            (newAttrs.length>0) && domElement.setAttrs(newAttrs, true);
-        },
-
-        attrsToModel: function(domElement) {
-            var args = domElement._args,
-                model = domElement.model,
-                attrValue;
-            args.each(function(value, key) {
-                attrValue = domElement.getAttr(key);
-                switch (value) {
-                    case 'boolean':
-                        attrValue = (attrValue==='true');
-                        break;
-                    case 'number':
-                        attrValue = parseFloat(attrValue);
-                        break;
-                    case 'date':
-                        attrValue = attrValue.toDate();
-                        break;
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
+        upgradeElement: function(domElement, domElementConstructor) {
+            var instance = this,
+                proto = domElementConstructor.prototype,
+                observer;
+            domElement.model = {};
+            if (!PROTO_SUPPORTED) {
+                mergeFlat(domElementConstructor, domElement);
+                domElement.__proto__ = proto;
+                domElement.__classCarier__ = domElementConstructor;
+                domElement.after('itag:prototypechanged', function(e) {
+                    var prototypes = e.prototypes;
+                    mergeFlat(domElementConstructor, domElement);
+                    if ('init' in prototypes) {
+                        domElement.reInitializeUI(domElement.__proto__.constructor);
+                    }
+                    else if ('sync' in prototypes) {
+                        domElement.syncUI();
+                    }
+                });
+                domElement.after('itag:prototyperemoved', function(e) {
+                    var properties = e.properties;
+                    mergeFlat(domElementConstructor, domElement);
+                    if (properties.contains('init')) {
+                        domElement.reInitializeUI(domElement.__proto__.constructor);
+                    }
+                    else if (properties.contains('sync')) {
+                        domElement.syncUI();
+                    }
+                });
+            }
+            else {
+                domElement.__proto__ = proto;
+                domElement.__classCarier__ = domElementConstructor;
+            }
+            // sync, but do this after the element is created:
+            // in the next eventcycle:
+            asyncSilent(function(){
+                instance.attrsToModel(domElement);
+                domElement.initUI(PROTO_SUPPORTED ? null : domElementConstructor);
+                domElement.syncUI();
+                if (NATIVE_OBJECT_OBSERVE) {
+                    observer = function() {
+                        instance.modelToAttrs(domElement);
+                        domElement.syncUI();
+                    };
+                    Object.observe(domElement.model, observer);
+                    domElement.setData('_observer', observer);
                 }
-                model[key] = attrValue;
+                instance.setRendered(domElement);
             });
         }
     };
 
+   /**
+    * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+    * definition replaces any previous nodes. (without touching unmodified nodes).
+    *
+    * Syncs the new vnode's childNodes with the dom.
+    *
+    * @method _setChildNodes
+    * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+    * @private
+    * @chainable
+    * @since 0.0.1
+    */
     DOCUMENT._createElement = DOCUMENT.createElement;
+   /**
+    * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+    * definition replaces any previous nodes. (without touching unmodified nodes).
+    *
+    * Syncs the new vnode's childNodes with the dom.
+    *
+    * @method _setChildNodes
+    * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+    * @private
+    * @chainable
+    * @since 0.0.1
+    */
     DOCUMENT.createElement = function(tag) {
         var ItagClass = window.ITAGS[tag.toLowerCase()];
         if (ItagClass) {
@@ -492,10 +950,36 @@ module.exports = function (window) {
     };
 
 
+    //===============================================================================
+    //== patching native prototypes =================================================
     (function(FunctionPrototype) {
         var originalSubClass = FunctionPrototype.subClass;
 
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
         FunctionPrototype._mergePrototypes = FunctionPrototype.mergePrototypes;
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
         FunctionPrototype.mergePrototypes = function(prototypes, force) {
             var instance = this,
                 silent;
@@ -506,25 +990,31 @@ module.exports = function (window) {
             else {
                 instance._mergePrototypes(prototypes, force, ITAG_METHODS, PROTECTED_MEMBERS);
                 silent = arguments[2];
+                /**
+                * Emitted when a draggable gets dropped inside a dropzone.
+                *
+                * @event *:dropzone-drop
+                * @param e {Object} eventobject including:
+                * @param e.target {HtmlElement} the dropzone
+                * @since 0.1
+                */
                 silent || Event.emit(instance, 'itag:prototypechanged', {prototypes: prototypes, force: force});
             }
             return instance;
         };
 
-        FunctionPrototype._removePrototypes = FunctionPrototype.removePrototypes;
-        FunctionPrototype.removePrototypes = function(properties) {
-            var instance = this;
-            if (!instance.$$itag) {
-                // default mergePrototypes
-                instance._removePrototypes.apply(instance, arguments);
-            }
-            else {
-                instance._removePrototypes(properties, ITAG_METHODS);
-                Event.emit(instance, 'itag:prototyperemoved', {properties: properties});
-            }
-            return instance;
-        };
-
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
         FunctionPrototype.pseudoClass = function(pseudo , prototypes, chainInit, chainDestroy) {
             var instance = this;
             if (!instance.$$itag) {
@@ -542,6 +1032,64 @@ module.exports = function (window) {
             return instance.subClass(instance.$$itag+':'+pseudo , prototypes, chainInit, chainDestroy);
         };
 
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
+        FunctionPrototype._removePrototypes = FunctionPrototype.removePrototypes;
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
+        FunctionPrototype.removePrototypes = function(properties) {
+            var instance = this;
+            if (!instance.$$itag) {
+                // default mergePrototypes
+                instance._removePrototypes.apply(instance, arguments);
+            }
+            else {
+                instance._removePrototypes(properties, ITAG_METHODS);
+                /**
+                * Emitted when a draggable gets dropped inside a dropzone.
+                *
+                * @event *:dropzone-drop
+                * @param e {Object} eventobject including:
+                * @param e.target {HtmlElement} the dropzone
+                * @since 0.1
+                */
+                Event.emit(instance, 'itag:prototyperemoved', {properties: properties});
+            }
+            return instance;
+        };
+
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
         FunctionPrototype.subClass = function(constructor, prototypes, chainInit, chainDestroy) {
             var instance = this,
                 baseProt, proto, domElementConstructor, itagName, pseudo, registerName, itagNameSplit;
@@ -582,7 +1130,10 @@ module.exports = function (window) {
 
                 domElementConstructor.prototype = proto;
 
-                proto.constructor = domElementConstructor;
+                // webkit doesn't let all objects to have their constructor redefined
+                // when directly assigned. Using `defineProperty will work:
+                Object.defineProperty(proto, 'constructor', {value: domElementConstructor});
+
                 domElementConstructor.$$itag = itagName;
                 domElementConstructor.$$pseudo = pseudo;
                 domElementConstructor.$$chainInited = chainInit ? true : false;
@@ -605,27 +1156,172 @@ module.exports = function (window) {
 
     }(Function.prototype));
 
+    (function(ElementPrototype) {
+        var setAttributeBKP = ElementPrototype.setAttribute,
+            removeAttributeBKP = ElementPrototype.removeAttribute;
 
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
+        ElementPrototype.removeAttribute = function(attributeName) {
+            var instance = this;
+            if (!instance.isItag()) {
+                removeAttributeBKP.apply(instance, arguments);
+            }
+            else {
+                if (instance._attrs[attributeName]) {
+                    delete instance.model[attributeName];
+                }
+                else {
+                    removeAttributeBKP.apply(instance, arguments);
+                }
+            }
+        };
 
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
+        ElementPrototype.setAttribute = function(attributeName, value, silent) {
+            var instance = this,
+                valueType;
+            if (silent || !instance.isItag()) {
+                setAttributeBKP.apply(instance, arguments);
+            }
+            else {
+/*jshint boss:true */
+                if (valueType=instance._attrs[attributeName]) {
+/*jshint boss:false */
+                    switch (valueType) {
+                        case 'boolean':
+                            value = (value==='true');
+                            break;
+                        case 'number':
+                            value = parseFloat(value);
+                            break;
+                        case 'date':
+                            value = value.toDate();
+                            break;
+                    }
+                    instance.model[attributeName] = value;
+                }
+                else {
+                    setAttributeBKP.apply(instance, arguments);
+                }
+            }
+        };
+    }(window.Element.prototype));
+
+    (function(HTMLElementPrototype) {
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
+        HTMLElementPrototype.isItag = function() {
+            return !!this.vnode.tag.startsWith('I-');
+        };
+
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
+        HTMLElementPrototype.itagReady = function() {
+            var instance = this;
+            if (!instance.isItag()) {
+                console.warn('itagReady() invoked on a non-itag element');
+                return window.Promise.reject('Element is no itag');
+            }
+            instance._itagReady || (instance._itagReady=window.Promise.manage());
+            return instance._itagReady;
+        };
+    }(window.HTMLElement.prototype));
+
+    //===============================================================================
+
+   /**
+    * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+    * definition replaces any previous nodes. (without touching unmodified nodes).
+    *
+    * Syncs the new vnode's childNodes with the dom.
+    *
+    * @method _setChildNodes
+    * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+    * @private
+    * @chainable
+    * @since 0.0.1
+    */
     var createItagBaseClass = function () {
         return Function.prototype.subClass.apply(window.HTMLElement);
     };
 
-    /**
-     * Returns a base class with the given constructor and prototype methods
+    /*
+     * Internal hash containing all DOM-events that are listened for (at `document`).
      *
-     * @for Object
-     * @method createClass
-     * @param [constructor] {Function} constructor for the class
-     * @param [prototype] {Object} Hash map of prototype members of the new class
-     * @static
-     * @return {Function} the new class
+     * DOMEvents = {
+     *     'click': callbackFn,
+     *     'mousemove': callbackFn,
+     *     'keypress': callbackFn
+     * }
+     *
+     * @property DOMEvents
+     * @default {}
+     * @type Object
+     * @private
+     * @since 0.0.1
     */
     Object.protectedProp(Classes, 'ItagBaseClass', createItagBaseClass().mergePrototypes(EXTRA_BASE_MEMBERS, true, {}, {}));
 
     // because `mergePrototypes` cannot merge object-getters, we will add the getter `$super` manually:
     Object.defineProperties(Classes.ItagBaseClass.prototype, Classes.coreMethods);
 
+    /*
+     * Internal hash containing all DOM-events that are listened for (at `document`).
+     *
+     * DOMEvents = {
+     *     'click': callbackFn,
+     *     'mousemove': callbackFn,
+     *     'keypress': callbackFn
+     * }
+     *
+     * @property DOMEvents
+     * @default {}
+     * @type Object
+     * @private
+     * @since 0.0.1
+    */
     Object.defineProperty(Classes.ItagBaseClass.prototype, '$superProp', {
         value: function(/* func, *args */) {
             var instance = this,
@@ -670,84 +1366,35 @@ module.exports = function (window) {
         }
     });
 
-    /**
-     * Returns a base class with the given constructor and prototype methods
+    /*
+     * Internal hash containing all DOM-events that are listened for (at `document`).
      *
-     * @for Object
-     * @method createClass
-     * @param [constructor] {Function} constructor for the class
-     * @param [prototype] {Object} Hash map of prototype members of the new class
-     * @static
-     * @return {Function} the new class
+     * DOMEvents = {
+     *     'click': callbackFn,
+     *     'mousemove': callbackFn,
+     *     'keypress': callbackFn
+     * }
+     *
+     * @property DOMEvents
+     * @default {}
+     * @type Object
+     * @private
+     * @since 0.0.1
     */
     Object.protectedProp(DOCUMENT, 'createItag', Classes.ItagBaseClass.subClass.bind(Classes.ItagBaseClass));
 
-
-
-
-    (function(HTMLElementPrototype) {
-        HTMLElementPrototype.isItag = function() {
-            return !!this.vnode.tag.startsWith('I-');
-        };
-        HTMLElementPrototype.itagReady = function() {
-            var instance = this;
-            if (!instance.isItag()) {
-                console.warn('itagReady() invoked on a non-itag element');
-                return window.Promise.reject('Element is no itag');
-            }
-            instance._itagReady || (instance._itagReady=window.Promise.manage());
-            return instance._itagReady;
-        };
-    }(window.HTMLElement.prototype));
-
-    (function(ElementPrototype) {
-        var setAttributeBKP = ElementPrototype.setAttribute;
-        var removeAttributeBKP = ElementPrototype.removeAttribute;
-
-        ElementPrototype.removeAttribute = function(attributeName) {
-            var instance = this;
-            if (!instance.isItag()) {
-                removeAttributeBKP.apply(instance, arguments);
-            }
-            else {
-                if (instance._args[attributeName]) {
-                    delete instance.model[attributeName];
-                }
-                else {
-                    removeAttributeBKP.apply(instance, arguments);
-                }
-            }
-        };
-        ElementPrototype.setAttribute = function(attributeName, value, silent) {
-            var instance = this,
-                valueType;
-            if (silent || !instance.isItag()) {
-                setAttributeBKP.apply(instance, arguments);
-            }
-            else {
-/*jshint boss:true */
-                if (valueType=instance._args[attributeName]) {
-/*jshint boss:false */
-                    switch (valueType) {
-                        case 'boolean':
-                            value = (value==='true');
-                            break;
-                        case 'number':
-                            value = parseFloat(value);
-                            break;
-                        case 'date':
-                            value = value.toDate();
-                            break;
-                    }
-                    instance.model[attributeName] = value;
-                }
-                else {
-                    setAttributeBKP.apply(instance, arguments);
-                }
-            }
-        };
-    }(window.Element.prototype));
-
+   /**
+    * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+    * definition replaces any previous nodes. (without touching unmodified nodes).
+    *
+    * Syncs the new vnode's childNodes with the dom.
+    *
+    * @method _setChildNodes
+    * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+    * @private
+    * @chainable
+    * @since 0.0.1
+    */
     DOCUMENT.refreshItags = function() {
         var list = this.getItags(),
             len = list.length,
@@ -764,70 +1411,43 @@ module.exports = function (window) {
         allowedToRefreshItags = true;
     };
 
-
-    if (PROTO_SUPPORTED) {
-        Event.after(
-            'itag:prototypechanged',
-            function(e) {
-                var prototypes = e.prototypes,
-                    ItagClass = e.target,
-                    nodeList, node, i, length;
-                if ('init' in prototypes) {
-                    nodeList = DOCUMENT.getAll(ItagClass.$$itag+'.'+CLASS_ITAG_RENDERED);
-                    length = nodeList.length;
-                    for (i=0; i<length; i++) {
-                        node = nodeList[i];
-                        node.reInitializeUI();
-                    }
-                }
-                else if ('sync' in prototypes) {
-                    nodeList = DOCUMENT.getAll(ItagClass.$$itag+'.'+CLASS_ITAG_RENDERED);
-                    length = nodeList.length;
-                    for (i=0; i<length; i++) {
-                        node = nodeList[i];
-                        node.syncUI();
-                    }
-                }
-            }
-        );
-        Event.after(
-            'itag:prototyperemoved',
-            function(e) {
-                var properties = e.properties,
-                    ItagClass = e.target,
-                    nodeList, node, i, length;
-                if (properties.contains('init')) {
-                    nodeList = DOCUMENT.getAll(ItagClass.$$itag+'.'+CLASS_ITAG_RENDERED);
-                    length = nodeList.length;
-                    for (i=0; i<length; i++) {
-                        node = nodeList[i];
-                        node.reInitializeUI();
-                    }
-                }
-                else if (properties.contains('sync')) {
-                    nodeList = DOCUMENT.getAll(ItagClass.$$itag+'.'+CLASS_ITAG_RENDERED);
-                    length = nodeList.length;
-                    for (i=0; i<length; i++) {
-                        node = nodeList[i];
-                        node.syncUI();
-                    }
-                }
-            }
-        );
-    }
-
     itagCore.setupWatchers();
-
     itagCore.setupEmitters();
 
+    /*
+     * Internal hash containing all DOM-events that are listened for (at `document`).
+     *
+     * DOMEvents = {
+     *     'click': callbackFn,
+     *     'mousemove': callbackFn,
+     *     'keypress': callbackFn
+     * }
+     *
+     * @property DOMEvents
+     * @default {}
+     * @type Object
+     * @private
+     * @since 0.0.1
+    */
     Object.protectedProp(window, '_ItagCore', itagCore);
 
     if (PROTOTYPE_CHAIN_CAN_BE_SET) {
+       /**
+        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
+        * definition replaces any previous nodes. (without touching unmodified nodes).
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _setChildNodes
+        * @param newVChildNodes {Array} array with vnodes which represent the new childNodes
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
         itagCore.setPrototypeChain = function(activate) {
             PROTO_SUPPORTED = activate ? !!Object.__proto__ : false;
         };
     }
 
     return itagCore;
-
 };
