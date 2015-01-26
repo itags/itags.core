@@ -531,7 +531,7 @@ module.exports = function (window) {
                 attrValue;
             attrs.each(function(value, key) {
                 attrValue = domElement.getAttr(key);
-                switch (value) {
+                switch (value.toLowerCase()) {
                     case 'boolean':
                         attrValue = (attrValue==='true');
                         break;
@@ -643,19 +643,17 @@ module.exports = function (window) {
         * @since 0.0.1
         */
         setupEmitters: function() {
-            Event.defineEvent('itag:change')
-                 .unPreventable()
-                 .noRender();
-            Event.after(NODE_CONTENT_CHANGE, function(e) {
+            Event.after('*:'+NODE_CONTENT_CHANGE, function(e) {
+                var element = e.target;
                 /**
-                * Emitted when a draggable gets dropped inside a dropzone.
+                * Emitted when an itag changed its content
                 *
-                * @event *:dropzone-drop
+                * @event *:change
                 * @param e {Object} eventobject including:
                 * @param e.target {HtmlElement} the dropzone
                 * @since 0.1
                 */
-                Event.emit(e.target, 'itag:change', {model: e.target.model});
+                element.emit('change', {model: element.model});
             }, this.itagFilter);
         },
 
@@ -768,7 +766,7 @@ module.exports = function (window) {
 
             if (PROTO_SUPPORTED) {
                 Event.after(
-                    'itag:prototypechange',
+                    '*:prototypechange',
                     function(e) {
                         var prototypes = e.prototypes,
                             ItagClass = e.target,
@@ -789,10 +787,11 @@ module.exports = function (window) {
                                 node.syncUI();
                             }
                         }
-                    }
+                    },
+                    instance.itagFilter
                 );
                 Event.after(
-                    'itag:prototyperemove',
+                    '*:prototyperemove',
                     function(e) {
                         var properties = e.properties,
                             ItagClass = e.target,
@@ -813,7 +812,8 @@ module.exports = function (window) {
                                 node.syncUI();
                             }
                         }
-                    }
+                    },
+                    instance.itagFilter
                 );
             }
         },
@@ -835,26 +835,34 @@ module.exports = function (window) {
                 mergeFlat(domElementConstructor, domElement);
                 domElement.__proto__ = proto;
                 domElement.__classCarier__ = domElementConstructor;
-                domElement.after('itag:prototypechange', function(e) {
-                    var prototypes = e.prototypes;
-                    mergeFlat(domElementConstructor, domElement);
-                    if ('init' in prototypes) {
-                        domElement.reInitializeUI(domElement.__proto__.constructor);
-                    }
-                    else if ('sync' in prototypes) {
-                        domElement.syncUI();
-                    }
-                });
-                domElement.after('itag:prototyperemove', function(e) {
-                    var properties = e.properties;
-                    mergeFlat(domElementConstructor, domElement);
-                    if (properties.contains('init')) {
-                        domElement.reInitializeUI(domElement.__proto__.constructor);
-                    }
-                    else if (properties.contains('sync')) {
-                        domElement.syncUI();
-                    }
-                });
+                domElement.after(
+                    '*:prototypechange',
+                    function(e) {
+                        var prototypes = e.prototypes;
+                        mergeFlat(domElementConstructor, domElement);
+                        if ('init' in prototypes) {
+                            domElement.reInitializeUI(domElement.__proto__.constructor);
+                        }
+                        else if ('sync' in prototypes) {
+                            domElement.syncUI();
+                        }
+                    },
+                    instance.itagFilter
+                );
+                domElement.after(
+                    '*:prototyperemove',
+                    function(e) {
+                        var properties = e.properties;
+                        mergeFlat(domElementConstructor, domElement);
+                        if (properties.contains('init')) {
+                            domElement.reInitializeUI(domElement.__proto__.constructor);
+                        }
+                        else if (properties.contains('sync')) {
+                            domElement.syncUI();
+                        }
+                    },
+                    instance.itagFilter
+                );
             }
             else {
                 domElement.__proto__ = proto;
@@ -952,7 +960,7 @@ module.exports = function (window) {
         *     <li>scroll</li>
         * </ul>
         *
-        * Events that are not in this list don;t need to be set: they always go through the finalizer immediatly.
+        * Events that are not in this list don't need to be set: they always go through the finalizer immediatly.
         *
         * You need to set this if the itag-definition its `sync`-method should be updated after one of the events in the list.
         *
@@ -1020,18 +1028,17 @@ module.exports = function (window) {
          * By default, this method will not override existing prototype members,
          * unless the second argument `force` is true.
          *
-         * In case of merging properties into an itag, a `itag:prototypechange`-event gets emitted
+         * In case of merging properties into an itag, a `*:prototypechange`-event gets emitted
          *
          * @method mergePrototypes
          * @param prototypes {Object} Hash prototypes of properties to add to the prototype of this object
          * @param [force=false] {Boolean}  If true, existing members will be overwritten
-         * @param [silent=false] {Boolean}  If true, no `itag:prototypechange` event will get emitted
+         * @param [silent=false] {Boolean}  If true, no `*:prototypechange` event will get emitted
          * @chainable
          * @since 0.0.1
         */
         FunctionPrototype.mergePrototypes = function(prototypes, force, silent) {
-            var instance = this,
-                silent;
+            var instance = this;
             if (!instance.$$itag) {
                 // default mergePrototypes
                 instance._mergePrototypes.apply(instance, arguments);
@@ -1039,35 +1046,36 @@ module.exports = function (window) {
             else {
                 instance._mergePrototypes(prototypes, force, ITAG_METHODS, PROTECTED_MEMBERS);
                 /**
-                * Emitted when prototypes are set on an existing itag-definition.
+                * Emitted when prototypes are set on an existing Itag-Class.
                 *
-                * @event itag:prototypechange
+                * @event *:prototypechange
                 * @param e {Object} eventobject including:
                 * @param e.prototypes {Object} Hash prototypes of properties to add to the prototype of this object
                 * @param e.force {Boolean} whether existing members are overwritten
                 * @since 0.1
                 */
-                silent || Event.emit(instance, 'itag:prototypechange', {prototypes: prototypes, force: !!force});
+                silent || instance.emit('prototypechange', {prototypes: prototypes, force: !!force});
             }
             return instance;
         };
 
        /**
         * Subclasses in Itag-Class into a pseudo-class: retaining its tagname, yet still subclassing.
-        * The pseudoclass gets identified by `i-parentclass:pseudo` and once rendered it has the signature of:
+        * The pseudoclass gets identified by `i-parentclass#pseudo` and once rendered it has the signature of:
         * &lt;i-parentclass&gt; is="pseudo" &lt;/i-parentclass&gt;
         *
         * Syncs the new vnode's childNodes with the dom.
         *
         * @method pseudoClass
-        * @param pseudo
-        * @param prototypes
-        * @param chainInit
-        * @param chainDestroy
+        * @param pseudo {String} The pseudoname (without a minustoken), leading into the definition of `i-parent:pseudo`
+        * @param [prototypes] {Object} Hash map of properties to be added to the prototype of the new class.
+        * @param [chainInit=true] {Boolean} Whether -during instance creation- to automaticly construct in the complete hierarchy with the given constructor arguments.
+        * @param [chainDestroy=true] {Boolean} Whether -when the Element gets out if the DOM- to automaticly destroy in the complete hierarchy.
+        * @param [subClassable=true] {Boolean} whether the Class is subclassable. Can only be set to false on ItagClasses
         * @return {Class}
         * @since 0.0.1
         */
-        FunctionPrototype.pseudoClass = function(pseudo, prototypes, chainInit, chainDestroy) {
+        FunctionPrototype.pseudoClass = function(pseudo, prototypes, chainInit, chainDestroy, subClassable) {
             var instance = this;
             if (!instance.$$itag) {
                 console.warn(NAME, 'cannot pseudoClass '+pseudo+' for its Parent is no Itag-Class');
@@ -1081,14 +1089,11 @@ module.exports = function (window) {
                 console.warn(NAME, 'cannot pseudoClass '+pseudo+' --> name cannot consist a minus-token');
                 return instance;
             }
-            return instance.subClass(instance.$$itag+':'+pseudo , prototypes, chainInit, chainDestroy);
+            return instance.subClass(instance.$$itag+'#'+pseudo , prototypes, chainInit, chainDestroy, subClassable);
         };
 
        /**
-        * Redefines the childNodes of both the vnode as well as its related dom-node. The new
-        * definition replaces any previous nodes. (without touching unmodified nodes).
-        *
-        * Syncs the new vnode's childNodes with the dom.
+        * Backup of the original `removePrototypes`-method.
         *
         * @method _removePrototypes
         * @param properties
@@ -1118,16 +1123,49 @@ module.exports = function (window) {
             else {
                 instance._removePrototypes(properties, ITAG_METHODS);
                 /**
-                * Emitted when a draggable gets dropped inside a dropzone.
+                * Emitted when prototypes are removed off an existing Itag-Class.
                 *
-                * @event *:dropzone-drop
+                * @event *:prototyperemove
                 * @param e {Object} eventobject including:
-                * @param e.target {HtmlElement} the dropzone
+                * @param e.prototypes {Object} Hash prototypes of properties to add to the prototype of this object
                 * @since 0.1
                 */
-                Event.emit(instance, 'itag:prototyperemove', {properties: properties});
+                instance.emit('prototyperemove', {properties: properties});
             }
             return instance;
+        };
+
+
+       /**
+        * Backup of the original `setConstructor`-method.
+        *
+        * @method _setConstructor
+        * @param [constructorFn] {Function} The function that will serve as the new constructor for the class.
+        *        If `undefined` defaults to `NOOP`
+        * @param [prototypes] {Object} Hash map of properties to be added to the prototype of the new class.
+        * @param [chainConstruct=true] {Boolean} Whether -during instance creation- to automaticly construct in the complete hierarchy with the given constructor arguments.
+        * @chainable
+        * @since 0.0.1
+        */
+        FunctionPrototype._setConstructor = FunctionPrototype.setConstructor;
+
+        /**
+         * Redefines the constructor fo the Class
+         *
+         * @method setConstructor
+         * @param [constructorFn] {Function} The function that will serve as the new constructor for the class.
+         *        If `undefined` defaults to `NOOP`
+         * @param [prototypes] {Object} Hash map of properties to be added to the prototype of the new class.
+         * @param [chainConstruct=true] {Boolean} Whether -during instance creation- to automaticly construct in the complete hierarchy with the given constructor arguments.
+         * @chainable
+         */
+        FunctionPrototype.setConstructor = function(/* constructorFn, chainConstruct */) {
+            var instance = this;
+            if (instance.$$itag) {
+                console.warn(NAME, 'Itags don\t have a constructor --> you need to redefine "init()" by using mergePrototypes()');
+                return instance;
+            }
+            return instance._setConstructor.apply(instance, arguments);
         };
 
        /**
@@ -1149,7 +1187,7 @@ module.exports = function (window) {
         */
         FunctionPrototype.subClass = function(constructorOrItagname, prototypes, chainInit, chainDestroy, subClassable) {
             var instance = this,
-                baseProt, proto, domElementConstructor, itagName, pseudo, registerName, itagNameSplit;
+                baseProt, proto, domElementConstructor, itagName, pseudo, registerName, itagNameSplit, itagEmitterName;
             if (typeof constructorOrItagname === 'string') {
                 // Itag subclassing
                 if (typeof prototypes === 'boolean') {
@@ -1171,7 +1209,7 @@ module.exports = function (window) {
                     console.warn(itagName+' already exists: it will be redefined');
                 }
                 registerName = itagName;
-                itagNameSplit = itagName.split(':');
+                itagNameSplit = itagName.split('#');
                 itagName = itagNameSplit[0];
                 pseudo = itagNameSplit[1]; // may be undefined
 
@@ -1194,9 +1232,9 @@ module.exports = function (window) {
 
                 domElementConstructor.prototype = proto;
 
-                // webkit doesn't let all objects to have their constructorOrItagname redefined
+                // webkit doesn't let all objects to have their constructor redefined
                 // when directly assigned. Using `defineProperty will work:
-                Object.defineProperty(proto, 'constructorOrItagname', {value: domElementConstructor});
+                Object.defineProperty(proto, 'constructor', {value: domElementConstructor});
 
                 domElementConstructor.$$itag = itagName;
                 domElementConstructor.$$pseudo = pseudo;
@@ -1206,7 +1244,20 @@ module.exports = function (window) {
                 domElementConstructor.$$orig = {};
                 domElementConstructor.$$subClassable = subClassable;
 
+                itagEmitterName = itagName + (pseudo ? '#'+pseudo : '');
+                domElementConstructor.mergePrototypes(Event.Emitter(itagEmitterName), true, true);
                 prototypes && domElementConstructor.mergePrototypes(prototypes, true, true);
+                // make emitting change-events unpreventable and unrenderable:
+                Event.defineEvent(itagEmitterName+':change')
+                     .unPreventable()
+                     .noRender();
+                Event.defineEvent(itagEmitterName+':prototypechange')
+                     .unPreventable()
+                     .noRender();
+                Event.defineEvent(itagEmitterName+':prototyperemove')
+                     .unPreventable()
+                     .noRender();
+
                 window.ITAGS[registerName] = domElementConstructor;
 
                 itagCore.renderDomElements(domElementConstructor);
@@ -1240,9 +1291,9 @@ module.exports = function (window) {
         * @param [silent=false] {Boolean} prevent node-mutation events by the Event-module to emit
         * @since 0.0.1
         */
-        ElementPrototype.removeAttribute = function(attributeName) {
+        ElementPrototype.removeAttribute = function(attributeName, silent) {
             var instance = this;
-            if (!instance.isItag()) {
+            if (!instance.isItag() || silent) {
                 removeAttributeBKP.apply(instance, arguments);
             }
             else {
@@ -1270,14 +1321,14 @@ module.exports = function (window) {
         ElementPrototype.setAttribute = function(attributeName, value, silent) {
             var instance = this,
                 valueType;
-            if (silent || !instance.isItag()) {
+            if (!instance.isItag() || silent) {
                 setAttributeBKP.apply(instance, arguments);
             }
             else {
 /*jshint boss:true */
                 if (valueType=instance._attrs[attributeName]) {
 /*jshint boss:false */
-                    switch (valueType) {
+                    switch (valueType.toLowerCase()) {
                         case 'boolean':
                             value = (value==='true');
                             break;
@@ -1398,11 +1449,16 @@ module.exports = function (window) {
      *
      *
      * @property createItag
+     * @param itagName {String} The name of the itag-element, starting with `i-`
+     * @param [prototypes] {Object} Hash map of properties to be added to the prototype of the new class.
+     * @param [subClassable=true] {Boolean} whether the Class is subclassable. Can only be set to false on ItagClasses
      * @type Class
      * @for document
      * @since 0.0.1
     */
-    Object.protectedProp(DOCUMENT, 'createItag', Classes.ItagBaseClass.subClass.bind(Classes.ItagBaseClass));
+    Object.protectedProp(DOCUMENT, 'createItag', function(itagName, prototypes, subClassable) {
+        return Classes.ItagBaseClass.subClass.call(Classes.ItagBaseClass, itagName, prototypes, null, null, subClassable);
+    });
 
    /**
     * Refreshes all Itag-elements in the dom by syncing their element.model onto the attributes and calling their `sync`-method.
