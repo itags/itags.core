@@ -108,6 +108,10 @@ module.exports = function (window) {
      * @since 0.0.1
     */
     EXTRA_BASE_MEMBERS = {
+        _attrsToModel: function() {
+            itagCore.attrsToModel(this);
+        },
+
        /**
         * Binds a model to the itag-element, making element.model equals the bound model.
         * Immediately syncs the itag with the new model-data.
@@ -830,7 +834,7 @@ module.exports = function (window) {
             var instance = this,
                 proto = domElementConstructor.prototype,
                 observer;
-            domElement.model = {};
+            domElement.model || (domElement.model={});
             if (!PROTO_SUPPORTED) {
                 mergeFlat(domElementConstructor, domElement);
                 domElement.__proto__ = proto;
