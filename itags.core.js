@@ -73,6 +73,7 @@ module.exports = function (window) {
         PROTO_SUPPORTED = !!Object.__proto__,
         allowedToRefreshItags = true,
         itagsThatNeedsEvent = {},
+        BINDING_LIST = {},
         itagCore, MUTATION_EVENTS, PROTECTED_MEMBERS, EXTRA_BASE_MEMBERS, Event, IO,
         setTimeoutBKP, setIntervalBKP, setImmediateBKP, DEFAULT_DELAYED_FINALIZE_EVENTS,
         ATTRIBUTE_EVENTS, registerDelay, manageFocus, mergeFlat,  DELAYED_FINALIZE_EVENTS;
@@ -108,53 +109,6 @@ module.exports = function (window) {
      * @since 0.0.1
     */
     EXTRA_BASE_MEMBERS = {
-        _attrsToModel: function() {
-            itagCore.attrsToModel(this);
-        },
-
-       /**
-        * Binds a model to the itag-element, making element.model equals the bound model.
-        * Immediately syncs the itag with the new model-data.
-        *
-        * Syncs the new vnode's childNodes with the dom.
-        *
-        * @method bindModel
-        * @param model {Object} the model to bind to the itag-element
-        * @chainable
-        * @since 0.0.1
-        */
-        bindModel: function(model) {
-            var instance = this,
-                stringifiedData, prevContent, observer;
-            if (NATIVE_OBJECT_OBSERVE) {
-                observer = instance.getData('_observer');
-                observer && Object.unobserve(instance.model, observer);
-            }
-            instance.model = model;
-            if (NATIVE_OBJECT_OBSERVE) {
-                observer = function() {
-                    itagCore.modelToAttrs(instance);
-                    instance.syncUI();
-                };
-                Object.observe(instance.model, observer);
-                instance.setData('_observer', observer);
-            }
-            instance.syncUI();
-            if (RUNNING_ON_NODE) {
-                // store the modeldata inside an inner div-node
-                try {
-                    stringifiedData = JSON.stringify(model);
-                    prevContent = instance.getElement('span.itag-data');
-                    prevContent && prevContent.remove();
-                    instance.prepend('<span class="itag-data">'+stringifiedData+'</span>');
-                }
-                catch(e) {
-                    console.warn(e);
-                }
-            }
-            return instance;
-        },
-
        /**
         * Calls `_destroyUI` on through the class-chain on every level (bottom-up).
         * _destroyUI gets defined when the itag defines `destroy` --> transformation under the hood.
@@ -188,8 +142,9 @@ module.exports = function (window) {
                 };
                 superDestroy(constructor || instance.constructor);
                 instance.detachAll();
-                reInitialize || Object.protectedProp(vnode, 'ce_destroyed', true);
+                instance.model = null;
             }
+            reInitialize || Object.protectedProp(vnode, 'ce_destroyed', true);
             return instance;
         },
 
@@ -229,6 +184,7 @@ module.exports = function (window) {
                 }
                 superInit(constructor || instance.constructor);
                 Object.protectedProp(vnode, 'ce_initialized', true);
+                instance._itagInitialized.fulfill();
             }
             return instance;
         },
@@ -304,6 +260,8 @@ module.exports = function (window) {
             }
             return instance;
         },
+
+        _itagInitialized: window.Promise.manage(),
 
         /**
          * Internal hash containing the `attrs`-definition which can be set by the itag-declaration.
@@ -520,6 +478,54 @@ module.exports = function (window) {
     };
 
     itagCore = {
+       /**
+        * Binds a model to the itag-element, making element.model equals the bound model.
+        * Immediately syncs the itag with the new model-data.
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method bindModel
+        * @param element {HTMLElement} element, which should be an Itag
+        * @param model {Object} the model to bind to the itag-element
+        * @since 0.0.1
+        */
+        bindModel: function(element, model) {
+            var stringifiedData, prevContent, observer;
+            if (element.isItag()) {
+                element._itagInitialized.then(
+                    function() {
+                        if (NATIVE_OBJECT_OBSERVE) {
+                            observer = element.getData('_observer');
+                            observer && Object.unobserve(element.model, observer);
+                        }
+                        element.model = model;
+                        if (NATIVE_OBJECT_OBSERVE) {
+                            observer = function() {
+                                itagCore.modelToAttrs(element);
+                                element.syncUI();
+                            };
+                            Object.observe(element.model, observer);
+                            element.setData('_observer', observer);
+                        }
+                        element.syncUI();
+                        element.itagRendered || element.setRendered();
+                        if (RUNNING_ON_NODE) {
+                            // store the modeldata inside an inner div-node
+                            try {
+                                stringifiedData = JSON.stringify(model);
+                                prevContent = element.getElement('span.itag-data');
+                                prevContent && prevContent.remove();
+                                element.prepend('<span class="itag-data">'+stringifiedData+'</span>');
+                            }
+                            catch(e) {
+                                console.warn(e);
+                            }
+                        }
+                    }
+                );
+            }
+        },
+
        /**
         * Copies the attibute-values into element.model.
         * Only processes the attributes that are defined through the Itag-class its `attrs`-property.
@@ -875,9 +881,19 @@ module.exports = function (window) {
             // sync, but do this after the element is created:
             // in the next eventcycle:
             asyncSilent(function(){
+                var needsToBind = false;
                 instance.attrsToModel(domElement);
                 domElement.initUI(PROTO_SUPPORTED ? null : domElementConstructor);
-                domElement.syncUI();
+                // only if no modelbinding is needed, we can directly sync and make ready,
+                // otherwise we need to make this done by  `bindModel`
+                BINDING_LIST.some(function(value, selector) {
+                    domElement.matches(selector) && (needsToBind=true);
+                    return needsToBind;
+                });
+                if (!needsToBind) {
+                    domElement.syncUI();
+                    instance.setRendered(domElement);
+                }
                 if (NATIVE_OBJECT_OBSERVE) {
                     observer = function() {
                         instance.modelToAttrs(domElement);
@@ -886,7 +902,6 @@ module.exports = function (window) {
                     Object.observe(domElement.model, observer);
                     domElement.setData('_observer', observer);
                 }
-                instance.setRendered(domElement);
             });
         }
     };
@@ -931,6 +946,21 @@ module.exports = function (window) {
             return new ItagClass();
         }
         return this._createElement(tag);
+    };
+
+   /**
+    * Binds a model to the itag-element, making element.model equals the bound model.
+    * Immediately syncs the itag with the new model-data.
+    *
+    * Syncs the new vnode's childNodes with the dom.
+    *
+    * @method bindModel
+    * @param model {Object} the model to bind to the itag-element
+    * @chainable
+    * @since 0.0.1
+    */
+    DOCUMENT.bindModel = function(model, selector, fineGrain) {
+        return DOCUMENT.documentElement.bindModel(model, selector, fineGrain);
     };
 
     //===============================================================================
@@ -1285,6 +1315,53 @@ module.exports = function (window) {
             removeAttributeBKP = ElementPrototype.removeAttribute;
 
        /**
+        * Binds a model to the itag-element, making element.model equals the bound model.
+        * Immediately syncs the itag with the new model-data.
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method bindModel
+        * @param model {Object} the model to bind to the itag-element
+        * @chainable
+        * @since 0.0.1
+        */
+        ElementPrototype.bindModel = function(model, selector, fineGrain) {
+            var instance = this,
+                listener, elements;
+            if ((typeof selector === 'string') && (selector.length>0) && !BINDING_LIST[selector]) {
+                BINDING_LIST[selector] = true;
+                elements = instance.getAll(selector);
+                elements.forEach(function(element) {
+                    itagCore.bindModel(element, fineGrain ? fineGrain(element, model) : model);
+                });
+                listener = Event.after(NODE_INSERT, function(e) {
+                    var element = e.target;
+                    itagCore.bindModel(element, fineGrain ? fineGrain(element, model) : model);
+                    element.selfOnceAfter(
+                        NODE_REMOVE,
+                        function() {
+                            listener.detach();
+                        }
+                    );
+                }, selector);
+                return {
+                    detach: function() {
+                        listener.detach();
+                        delete BINDING_LIST[selector];
+                    }
+                };
+            }
+            // else
+            return {
+                detach: function() {
+                    if (typeof selector === 'string') {
+                        delete BINDING_LIST[selector];
+                    }
+                }
+            };
+        };
+
+       /**
         * Removes the attribute from the Element.
         * In case of an Itag --> will remove the property of element.model
         *
@@ -1478,7 +1555,8 @@ module.exports = function (window) {
         allowedToRefreshItags = false; // prevent setTimeout to fall into loop
         for (i=0; i<len; i++) {
             itagElement = list[i];
-            if (itagElement.isRendered && itagElement.isRendered()) {
+            // because itagElement could be removed intermediste, we need to check if it's there
+            if (itagElement && itagElement.isRendered && itagElement.isRendered()) {
                 itagCore.modelToAttrs(itagElement);
                 itagElement.syncUI();
                 itagElement.hasClass('focussed') && manageFocus(itagElement);
