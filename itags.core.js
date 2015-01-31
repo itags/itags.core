@@ -230,6 +230,7 @@ module.exports = function (window) {
         * @since 0.0.1
         */
         reInitializeUI: function(constructor) {
+console.info('reInitializeUI');
             var instance = this,
                 vnode = instance.vnode;
             if (vnode.ce_initialized && !vnode.removedFromDOM && !vnode.ce_destroyed) {
@@ -254,6 +255,8 @@ module.exports = function (window) {
                 attrs = instance._attrs,
                 vnode = instance.vnode;
             if (vnode.ce_initialized && !vnode.removedFromDOM && !vnode.ce_destroyed) {
+console.info('syncUIsyncUIsyncUIsyncUIsyncUIsyncUIsyncUIsyncUI');
+console.info(vnode);
                 vnode._setUnchangableAttrs(attrs);
                 instance._syncUI.apply(instance, arguments);
                 vnode._setUnchangableAttrs(null);
@@ -502,11 +505,14 @@ module.exports = function (window) {
                         if (NATIVE_OBJECT_OBSERVE) {
                             observer = function() {
                                 itagCore.modelToAttrs(element);
+console.info('bindModel observer');
                                 element.syncUI();
                             };
                             Object.observe(element.model, observer);
                             element.setData('_observer', observer);
                         }
+console.info('bindModel');
+
                         element.syncUI();
                         element.itagRendered || element.setRendered();
                         if (RUNNING_ON_NODE) {
@@ -692,6 +698,7 @@ module.exports = function (window) {
                 function(e) {
                     var element = e.target;
                     instance.attrsToModel(element);
+console.info('Attributechange event will refresh itags');
                     NATIVE_OBJECT_OBSERVE || DOCUMENT.refreshItags();
                     // this affect modeldata, the event.finalizer will sync the UI
                     // AFTER synced, we might need to refocus --> that's why refocussing
@@ -712,11 +719,13 @@ module.exports = function (window) {
                         if (!MUTATION_EVENTS[type] && !type.endsWith('outside')) {
                             if (DELAYED_FINALIZE_EVENTS[type]) {
                                 registerDelay || (registerDelay = laterSilent(function() {
+console.info('Event-finalizer will refresh itags');
                                     DOCUMENT.refreshItags();
                                     registerDelay = null;
                                 }, DELAYED_EVT_TIME));
                             }
                             else {
+console.info('Event-finalizer will refresh itags');
                                 DOCUMENT.refreshItags();
                             }
                         }
@@ -724,6 +733,7 @@ module.exports = function (window) {
                 });
 
                 IO.finalize(function() {
+console.info('IO-finalizer will refresh itags');
                     allowedToRefreshItags && DOCUMENT.refreshItags();
                 });
 
@@ -737,6 +747,7 @@ module.exports = function (window) {
                         args[0] = (function(originalFn) {
                             return function() {
                                 originalFn();
+console.info('setTimeOut will refresh itags');
                                 DOCUMENT.refreshItags();
                             };
                         })(args[0]);
@@ -750,6 +761,7 @@ module.exports = function (window) {
                         args[0] = (function(originalFn) {
                             return function() {
                                 originalFn();
+console.info('setInterval will refresh itags');
                                 DOCUMENT.refreshItags();
                             };
                         })(args[0]);
@@ -765,6 +777,7 @@ module.exports = function (window) {
                             args[0] = (function(originalFn) {
                                 return function() {
                                     originalFn();
+console.info('setImmediate will refresh itags');
                                     DOCUMENT.refreshItags();
                                 };
                             })(args[0]);
@@ -794,6 +807,7 @@ module.exports = function (window) {
                             length = nodeList.length;
                             for (i=0; i<length; i++) {
                                 node = nodeList[i];
+console.info('prototypechange');
                                 node.syncUI();
                             }
                         }
@@ -819,6 +833,7 @@ module.exports = function (window) {
                             length = nodeList.length;
                             for (i=0; i<length; i++) {
                                 node = nodeList[i];
+console.info('prototyperemove');
                                 node.syncUI();
                             }
                         }
@@ -854,6 +869,7 @@ module.exports = function (window) {
                             domElement.reInitializeUI(domElement.__proto__.constructor);
                         }
                         else if ('sync' in prototypes) {
+console.info('upgradeElement prototypechange');
                             domElement.syncUI();
                         }
                     },
@@ -868,6 +884,7 @@ module.exports = function (window) {
                             domElement.reInitializeUI(domElement.__proto__.constructor);
                         }
                         else if (properties.contains('sync')) {
+console.info('upgradeElement prototyperemove');
                             domElement.syncUI();
                         }
                     },
@@ -896,6 +913,7 @@ module.exports = function (window) {
                 }
                 if (NATIVE_OBJECT_OBSERVE) {
                     observer = function() {
+console.info('upgradeElement without bindmodel observer');
                         instance.modelToAttrs(domElement);
                         domElement.syncUI();
                     };
@@ -1553,11 +1571,13 @@ module.exports = function (window) {
             len = list.length,
             i, itagElement;
         allowedToRefreshItags = false; // prevent setTimeout to fall into loop
+console.info('refreshItagsrefreshItagsrefreshItagsrefreshItagsrefreshItags '+len);
         for (i=0; i<len; i++) {
             itagElement = list[i];
             // because itagElement could be removed intermediste, we need to check if it's there
             if (itagElement && itagElement.isRendered && itagElement.isRendered()) {
                 itagCore.modelToAttrs(itagElement);
+console.info('refreshItags will syncUI of element');
                 itagElement.syncUI();
                 itagElement.hasClass('focussed') && manageFocus(itagElement);
             }
