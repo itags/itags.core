@@ -992,24 +992,27 @@ module.exports = function (window) {
     * @chainable
     * @since 0.0.1
     */
-    DOCUMENT.refreshItags = function() {
+    DOCUMENT.refreshItags = function(force) {
         console.info('refreshing Itags');
-        var list = this.getItags(),
-            len = list.length,
-            i, itagElement;
-        allowedToRefreshItags = false; // prevent setTimeout to fall into loop
-        (len===0) || console.info('refreshing Itags');
-        for (i=0; i<len; i++) {
-            itagElement = list[i];
-            // because itagElement could be removed intermediste, we need to check if it's there
-            if (itagElement && itagElement.isRendered && itagElement.isRendered()) {
-                itagCore.modelToAttrs(itagElement);
-                itagElement.syncUI();
-                itagElement.hasClass('focussed') && manageFocus(itagElement);
+        var instance = this,
+            list, len, i, itagElement;
+        if (!NATIVE_OBJECT_OBSERVE || force) {
+            list = instance.getItags();
+            len = list.length;
+            allowedToRefreshItags = false; // prevent setTimeout to fall into loop
+            (len===0) || console.info('refreshing Itags');
+            for (i=0; i<len; i++) {
+                itagElement = list[i];
+                // because itagElement could be removed intermediste, we need to check if it's there
+                if (itagElement && itagElement.isRendered && itagElement.isRendered()) {
+                    itagCore.modelToAttrs(itagElement);
+                    itagElement.syncUI();
+                    itagElement.hasClass('focussed') && manageFocus(itagElement);
+                }
             }
+            allowedToRefreshItags = true;
         }
-        allowedToRefreshItags = true;
-        return this;
+        return instance;
     };
 
 
