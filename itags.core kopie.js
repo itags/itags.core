@@ -476,54 +476,6 @@ module.exports = function (window) {
 
     itagCore = {
        /**
-        * Binds a model to the itag-element, making element.model equals the bound model.
-        * Immediately syncs the itag with the new model-data.
-        *
-        * Syncs the new vnode's childNodes with the dom.
-        *
-        * @method bindModel
-        * @param element {HTMLElement} element, which should be an Itag
-        * @param model {Object} the model to bind to the itag-element
-        * @since 0.0.1
-        */
-        bindModel: function(element, model) {
-            var instance = this,
-                stringifiedData, prevContent, observer;
-            if (element.isItag()) {
-                if (NATIVE_OBJECT_OBSERVE) {
-                    observer = element.getData('_observer');
-                    observer && Object.unobserve(element.model, observer);
-                }
-                element.model = model;
-                if (NATIVE_OBJECT_OBSERVE) {
-                    observer = function() {
-                        itagCore.modelToAttrs(element);
-                        element.syncUI();
-                    };
-                    Object.observe(element.model, observer);
-                    element.setData('_observer', observer);
-                }
-                if (!element.vnode.ce_initialized) {
-                    element.initUI(PROTO_SUPPORTED ? null : element.__proto__.constructor);
-                }
-                element.syncUI();
-                element.itagRendered || instance.setRendered(element);
-                if (RUNNING_ON_NODE) {
-                    // store the modeldata inside an inner div-node
-                    try {
-                        stringifiedData = JSON.stringify(model);
-                        prevContent = element.getElement('span.itag-data');
-                        prevContent && prevContent.remove();
-                        element.prepend('<span class="itag-data">'+stringifiedData+'</span>');
-                    }
-                    catch(e) {
-                        console.warn(e);
-                    }
-                }
-            }
-        },
-
-       /**
         * Copies the attibute-values into element.model.
         * Only processes the attributes that are defined through the Itag-class its `attrs`-property.
         *
@@ -551,6 +503,58 @@ module.exports = function (window) {
                 }
                 model[key] = attrValue;
             });
+        },
+
+       /**
+        * Default function for binds a model to the itag-element, making element.model equals the bound model.
+        * Gets invoked on itagelement's `bindmodel`-event.
+        *
+        * Immediately syncs the itag with the new model-data.
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method bindModelDefFn
+        * @param e {Object} eventobject
+        * @param e.target {HTMLElement} the HTMLElement where the model was bound to
+        * @param e.model {Object} model that was bind to the element
+        * @since 0.0.1
+        */
+       bindModelDefFn: function(e) {
+            var element = e.target,
+                model = e.model,
+                stringifiedData, prevContent, observer;
+            if (element.isItag()) {
+                if (NATIVE_OBJECT_OBSERVE) {
+                    observer = element.getData('_observer');
+                    observer && Object.unobserve(element.model, observer);
+                }
+                element.model = model;
+                if (NATIVE_OBJECT_OBSERVE) {
+                    observer = function() {
+                        itagCore.modelToAttrs(element);
+                        element.syncUI();
+                    };
+                    Object.observe(element.model, observer);
+                    element.setData('_observer', observer);
+                }
+                if (!element.vnode.ce_initialized) {
+                    element.initUI(PROTO_SUPPORTED ? null : element.__proto__.constructor);
+                }
+                element.syncUI();
+                element.itagRendered || itagCore.setRendered(element);
+                if (RUNNING_ON_NODE) {
+                    // store the modeldata inside an inner div-node
+                    try {
+                        stringifiedData = JSON.stringify(model);
+                        prevContent = element.getElement('span.itag-data');
+                        prevContent && prevContent.remove();
+                        element.prepend('<span class="itag-data">'+stringifiedData+'</span>');
+                    }
+                    catch(e) {
+                        console.warn(e);
+                    }
+                }
+            }
         },
 
        /**
@@ -923,7 +927,7 @@ module.exports = function (window) {
     */
     manageFocus = function(domElement) {
         var focusManagerNode = domElement.getElement('[focusmanager].focussed');
-        // focusManagerNode && focusManagerNode.focus();
+        focusManagerNode && focusManagerNode.focus();
     };
 
    /**
@@ -1347,6 +1351,9 @@ module.exports = function (window) {
                 Event.defineEvent(itagEmitterName+':prototyperemove')
                      .unPreventable()
                      .noRender();
+                Event.defineEvent(itagEmitterName+':bindmodel')
+                     .defaultFn(itagCore.bindModelDefFn)
+                     .noRender();
 
                 window.ITAGS[registerName] = domElementConstructor;
 
@@ -1388,11 +1395,11 @@ module.exports = function (window) {
                 BINDING_LIST[selector] = true;
                 elements = instance.getAll(selector);
                 elements.forEach(function(element) {
-                    itagCore.bindModel(element, (typeof fineGrain==='function') ? fineGrain(element, model) : model);
+                    element.emit('bindmodel', {model: (typeof fineGrain==='function') ? fineGrain(element, model) : model});
                 });
                 listener = Event.after(NODE_INSERT, function(e) {
                     var element = e.target;
-                    itagCore.bindModel(element, (typeof fineGrain==='function') ? fineGrain(element, model) : model);
+                    element.emit('bindmodel', {model: (typeof fineGrain==='function') ? fineGrain(element, model) : model});
                     // element.selfOnceAfter is not available yet: listen through Event:
                     Event.onceAfter(
                         NODE_REMOVE,
