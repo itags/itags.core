@@ -39,7 +39,7 @@ var NAME = '[itags.core]: ',
     ATTRIBUTE_REMOVE = ATTRIBUTE+REMOVE,
     ATTRIBUTE_CHANGE = ATTRIBUTE+CHANGE,
     ATTRIBUTE_INSERT = ATTRIBUTE+INSERT,
-    DELAYED_EVT_TIME = 1000,
+    DELAYED_EVT_TIME = 500,
     NATIVE_OBJECT_OBSERVE = !!Object.observe,
     /**
      * Internal hash containing the names of members which names should be transformed
@@ -184,7 +184,6 @@ module.exports = function (window) {
                 }
                 superInit(constructor || instance.constructor);
                 Object.protectedProp(vnode, 'ce_initialized', true);
-                instance._itagInitialized.fulfill();
             }
             return instance;
         },
@@ -255,16 +254,12 @@ console.info('reInitializeUI');
                 attrs = instance._attrs,
                 vnode = instance.vnode;
             if (vnode.ce_initialized && !vnode.removedFromDOM && !vnode.ce_destroyed) {
-console.info('syncUIsyncUIsyncUIsyncUIsyncUIsyncUIsyncUIsyncUI');
-console.info(vnode);
                 vnode._setUnchangableAttrs(attrs);
                 instance._syncUI.apply(instance, arguments);
                 vnode._setUnchangableAttrs(null);
             }
             return instance;
         },
-
-        _itagInitialized: window.Promise.manage(),
 
         /**
          * Internal hash containing the `attrs`-definition which can be set by the itag-declaration.
@@ -493,42 +488,44 @@ console.info(vnode);
         * @since 0.0.1
         */
         bindModel: function(element, model) {
-            var stringifiedData, prevContent, observer;
+            var instance = this,
+                stringifiedData, prevContent, observer;
             if (element.isItag()) {
-                element._itagInitialized.then(
-                    function() {
-                        if (NATIVE_OBJECT_OBSERVE) {
-                            observer = element.getData('_observer');
-                            observer && Object.unobserve(element.model, observer);
-                        }
-                        element.model = model;
-                        if (NATIVE_OBJECT_OBSERVE) {
-                            observer = function() {
-                                itagCore.modelToAttrs(element);
+                if (NATIVE_OBJECT_OBSERVE) {
+                    observer = element.getData('_observer');
+                    observer && Object.unobserve(element.model, observer);
+                }
+                element.model = model;
+                if (NATIVE_OBJECT_OBSERVE) {
+                    observer = function() {
+                        itagCore.modelToAttrs(element);
 console.info('bindModel observer');
-                                element.syncUI();
-                            };
-                            Object.observe(element.model, observer);
-                            element.setData('_observer', observer);
-                        }
+                        element.syncUI();
+                    };
+                    Object.observe(element.model, observer);
+                    element.setData('_observer', observer);
+                }
 console.info('bindModel');
 
-                        element.syncUI();
-                        element.itagRendered || element.setRendered();
-                        if (RUNNING_ON_NODE) {
-                            // store the modeldata inside an inner div-node
-                            try {
-                                stringifiedData = JSON.stringify(model);
-                                prevContent = element.getElement('span.itag-data');
-                                prevContent && prevContent.remove();
-                                element.prepend('<span class="itag-data">'+stringifiedData+'</span>');
-                            }
-                            catch(e) {
-                                console.warn(e);
-                            }
-                        }
+                if (!element.vnode.ce_initialized) {
+                    instance.attrsToModel(element);
+                    element.initUI(PROTO_SUPPORTED ? null : element.__proto__.constructor);
+                }
+
+                element.syncUI();
+                element.itagRendered || element.setRendered();
+                if (RUNNING_ON_NODE) {
+                    // store the modeldata inside an inner div-node
+                    try {
+                        stringifiedData = JSON.stringify(model);
+                        prevContent = element.getElement('span.itag-data');
+                        prevContent && prevContent.remove();
+                        element.prepend('<span class="itag-data">'+stringifiedData+'</span>');
                     }
-                );
+                    catch(e) {
+                        console.warn(e);
+                    }
+                }
             }
         },
 
@@ -698,7 +695,7 @@ console.info('bindModel');
                 function(e) {
                     var element = e.target;
                     instance.attrsToModel(element);
-console.info('Attributechange event will refresh itags');
+console.info('Attributechange event will refresh itags ');
                     NATIVE_OBJECT_OBSERVE || DOCUMENT.refreshItags();
                     // this affect modeldata, the event.finalizer will sync the UI
                     // AFTER synced, we might need to refocus --> that's why refocussing
@@ -719,13 +716,13 @@ console.info('Attributechange event will refresh itags');
                         if (!MUTATION_EVENTS[type] && !type.endsWith('outside')) {
                             if (DELAYED_FINALIZE_EVENTS[type]) {
                                 registerDelay || (registerDelay = laterSilent(function() {
-console.info('Event-finalizer will refresh itags');
+console.info('Event-finalizer will refresh itags '+e.type+(new Date()).getTime());
                                     DOCUMENT.refreshItags();
                                     registerDelay = null;
                                 }, DELAYED_EVT_TIME));
                             }
                             else {
-console.info('Event-finalizer will refresh itags');
+console.info('Event-finalizer will refresh itags '+e.type+(new Date()).getTime());
                                 DOCUMENT.refreshItags();
                             }
                         }
@@ -899,15 +896,15 @@ console.info('upgradeElement prototyperemove');
             // in the next eventcycle:
             asyncSilent(function(){
                 var needsToBind = false;
-                instance.attrsToModel(domElement);
-                domElement.initUI(PROTO_SUPPORTED ? null : domElementConstructor);
-                // only if no modelbinding is needed, we can directly sync and make ready,
+                // only if no modelbinding is needed, we can directly init, sync and make ready,
                 // otherwise we need to make this done by  `bindModel`
                 BINDING_LIST.some(function(value, selector) {
                     domElement.matches(selector) && (needsToBind=true);
                     return needsToBind;
                 });
                 if (!needsToBind) {
+                    instance.attrsToModel(domElement);
+                    domElement.initUI(PROTO_SUPPORTED ? null : domElementConstructor);
                     domElement.syncUI();
                     instance.setRendered(domElement);
                 }
@@ -951,6 +948,21 @@ console.info('upgradeElement without bindmodel observer');
     DOCUMENT._createElement = DOCUMENT.createElement;
 
    /**
+    * Binds a model to the itag-element, making element.model equals the bound model.
+    * Immediately syncs the itag with the new model-data.
+    *
+    * Syncs the new vnode's childNodes with the dom.
+    *
+    * @method bindModel
+    * @param model {Object} the model to bind to the itag-element
+    * @chainable
+    * @since 0.0.1
+    */
+    DOCUMENT.bindModel = function(model, selector, fineGrain) {
+        return DOCUMENT.documentElement.bindModel(model, selector, fineGrain);
+    };
+
+   /**
     * Redefinition of document.createElement, enabling creation of itags.
     *
     * @method createElement
@@ -966,20 +978,49 @@ console.info('upgradeElement without bindmodel observer');
         return this._createElement(tag);
     };
 
+    /**
+     * Internal hash containing all DOM-events that are listened for (at `document`).
+     *
+     *
+     * @property createItag
+     * @param itagName {String} The name of the itag-element, starting with `i-`
+     * @param [prototypes] {Object} Hash map of properties to be added to the prototype of the new class.
+     * @param [subClassable=true] {Boolean} whether the Class is subclassable. Can only be set to false on ItagClasses
+     * @type Class
+     * @for document
+     * @since 0.0.1
+    */
+    Object.protectedProp(DOCUMENT, 'createItag', function(itagName, prototypes, subClassable) {
+        return Classes.ItagBaseClass.subClass.call(Classes.ItagBaseClass, itagName, prototypes, null, null, subClassable);
+    });
+
    /**
-    * Binds a model to the itag-element, making element.model equals the bound model.
-    * Immediately syncs the itag with the new model-data.
+    * Refreshes all Itag-elements in the dom by syncing their element.model onto the attributes and calling their `sync`-method.
     *
-    * Syncs the new vnode's childNodes with the dom.
-    *
-    * @method bindModel
-    * @param model {Object} the model to bind to the itag-element
+    * @method refreshItags
     * @chainable
     * @since 0.0.1
     */
-    DOCUMENT.bindModel = function(model, selector, fineGrain) {
-        return DOCUMENT.documentElement.bindModel(model, selector, fineGrain);
+    DOCUMENT.refreshItags = function() {
+        var list = this.getItags(),
+            len = list.length,
+            i, itagElement;
+        allowedToRefreshItags = false; // prevent setTimeout to fall into loop
+console.info('refreshItagsrefreshItagsrefreshItagsrefreshItagsrefreshItags '+len);
+        for (i=0; i<len; i++) {
+            itagElement = list[i];
+            // because itagElement could be removed intermediste, we need to check if it's there
+            if (itagElement && itagElement.isRendered && itagElement.isRendered()) {
+                itagCore.modelToAttrs(itagElement);
+console.info('refreshItags will syncUI of element');
+                itagElement.syncUI();
+                itagElement.hasClass('focussed') && manageFocus(itagElement);
+            }
+        }
+        allowedToRefreshItags = true;
+        return this;
     };
+
 
     //===============================================================================
     //== patching native prototypes =================================================
@@ -1029,27 +1070,33 @@ console.info('upgradeElement without bindmodel observer');
                 Array.isArray(domEvents) || (domEvents=[domEvents]);
                 domEvents.forEach(function(domEvent) {
                     domEvent.endsWith('outside') && (domEvent=domEvent.substr(0, domEvent.length-7));
-                    if (DEFAULT_DELAYED_FINALIZE_EVENTS[domEvent]) {
-                        itagsThatNeedsEvent[domEvent] || (itagsThatNeedsEvent[domEvent]=[]);
-                        itagsThatNeedsEvent[domEvent].push(itag);
-                        // remove from list in case at least one itag is in the dom:
-                        if (DOCUMENT.getElement(itag, true)) {
-                            delete DELAYED_FINALIZE_EVENTS[domEvent];
-                        }
-                        // add to the list whenever elements are removed and no itag is in the dom anymore:
-                        Event.after(NODE_REMOVE, function() {
-                            var elementThatNeedsEvent;
-                            itagsThatNeedsEvent[domEvent].some(function(oneItag) {
-                                DOCUMENT.getElement(oneItag, true) && (elementThatNeedsEvent=true);
-                                return elementThatNeedsEvent;
-                            });
-                            elementThatNeedsEvent || (DELAYED_FINALIZE_EVENTS[domEvent]=true);
-                        }, itag);
+                    domEvent = domEvent.toLowerCase();
+                    if (domEvent==='blur') {
+                        console.warn('the event "blur" cannot be delayed, for it would lead to extremely many syncing before anything changes which you don\'t need (fe when i-tabpane switches panes)');
+                    }
+                    else {
+                        if (DEFAULT_DELAYED_FINALIZE_EVENTS[domEvent]) {
+                            itagsThatNeedsEvent[domEvent] || (itagsThatNeedsEvent[domEvent]=[]);
+                            itagsThatNeedsEvent[domEvent].push(itag);
+                            // remove from list in case at least one itag is in the dom:
+                            if (DOCUMENT.getElement(itag, true)) {
+                                delete DELAYED_FINALIZE_EVENTS[domEvent];
+                            }
+                            // add to the list whenever elements are removed and no itag is in the dom anymore:
+                            Event.after(NODE_REMOVE, function() {
+                                var elementThatNeedsEvent;
+                                itagsThatNeedsEvent[domEvent].some(function(oneItag) {
+                                    DOCUMENT.getElement(oneItag, true) && (elementThatNeedsEvent=true);
+                                    return elementThatNeedsEvent;
+                                });
+                                elementThatNeedsEvent || (DELAYED_FINALIZE_EVENTS[domEvent]=true);
+                            }, itag);
 
-                        // remove from the list whenever itag is added in the dom:
-                        Event.after(NODE_INSERT, function() {
-                            delete DELAYED_FINALIZE_EVENTS[domEvent];
-                        }, itag);
+                            // remove from the list whenever itag is added in the dom:
+                            Event.after(NODE_INSERT, function() {
+                                delete DELAYED_FINALIZE_EVENTS[domEvent];
+                            }, itag);
+                        }
                     }
                 });
             }
@@ -1355,10 +1402,14 @@ console.info('upgradeElement without bindmodel observer');
                 listener = Event.after(NODE_INSERT, function(e) {
                     var element = e.target;
                     itagCore.bindModel(element, fineGrain ? fineGrain(element, model) : model);
-                    element.selfOnceAfter(
+                    // element.selfOnceAfter is not available yet: listen through Event:
+                    Event.onceAfter(
                         NODE_REMOVE,
                         function() {
                             listener.detach();
+                        },
+                        function(e) {
+                            return (e.target===element);
                         }
                     );
                 }, selector);
@@ -1542,49 +1593,6 @@ console.info('upgradeElement without bindmodel observer');
             return returnValue || superPrototype[firstArg];
         }
     });
-
-    /**
-     * Internal hash containing all DOM-events that are listened for (at `document`).
-     *
-     *
-     * @property createItag
-     * @param itagName {String} The name of the itag-element, starting with `i-`
-     * @param [prototypes] {Object} Hash map of properties to be added to the prototype of the new class.
-     * @param [subClassable=true] {Boolean} whether the Class is subclassable. Can only be set to false on ItagClasses
-     * @type Class
-     * @for document
-     * @since 0.0.1
-    */
-    Object.protectedProp(DOCUMENT, 'createItag', function(itagName, prototypes, subClassable) {
-        return Classes.ItagBaseClass.subClass.call(Classes.ItagBaseClass, itagName, prototypes, null, null, subClassable);
-    });
-
-   /**
-    * Refreshes all Itag-elements in the dom by syncing their element.model onto the attributes and calling their `sync`-method.
-    *
-    * @method refreshItags
-    * @chainable
-    * @since 0.0.1
-    */
-    DOCUMENT.refreshItags = function() {
-        var list = this.getItags(),
-            len = list.length,
-            i, itagElement;
-        allowedToRefreshItags = false; // prevent setTimeout to fall into loop
-console.info('refreshItagsrefreshItagsrefreshItagsrefreshItagsrefreshItags '+len);
-        for (i=0; i<len; i++) {
-            itagElement = list[i];
-            // because itagElement could be removed intermediste, we need to check if it's there
-            if (itagElement && itagElement.isRendered && itagElement.isRendered()) {
-                itagCore.modelToAttrs(itagElement);
-console.info('refreshItags will syncUI of element');
-                itagElement.syncUI();
-                itagElement.hasClass('focussed') && manageFocus(itagElement);
-            }
-        }
-        allowedToRefreshItags = true;
-        return this;
-    };
 
     itagCore.setupWatchers();
     itagCore.setupEmitters();
