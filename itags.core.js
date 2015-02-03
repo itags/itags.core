@@ -39,7 +39,7 @@ var NAME = '[itags.core]: ',
     ATTRIBUTE_REMOVE = ATTRIBUTE+REMOVE,
     ATTRIBUTE_CHANGE = ATTRIBUTE+CHANGE,
     ATTRIBUTE_INSERT = ATTRIBUTE+INSERT,
-    DELAYED_EVT_TIME = 100,
+    DELAYED_EVT_TIME = 500,
     NATIVE_OBJECT_OBSERVE = !!Object.observe,
     /**
      * Internal hash containing the names of members which names should be transformed
@@ -265,6 +265,12 @@ module.exports = function (window) {
             return instance;
         },
 
+        contentHidden: true,
+
+        setContentVisibility: function(value) {
+            (typeof value === 'boolean') && (this.contentHidden=!value);
+        },
+
         /**
          * Internal hash containing the `attrs`-definition which can be set by the itag-declaration.
          * This hash is used to determine which properties of `model` need to sync as an attribute.
@@ -481,6 +487,49 @@ module.exports = function (window) {
 
     itagCore = {
        /**
+        * Copies the attibute-values into element.model.
+        * Only processes the attributes that are defined through the Itag-class its `attrs`-property.
+        *
+        * @method attrsToModel
+        * @param domElement {HTMLElement} the itag that should be processed.
+        * @for itagCore
+        * @since 0.0.1
+        */
+        attrsToModel: function(domElement) {
+            var attrs = domElement._attrs,
+                attrValue, validValue;
+            attrs.each(function(value, key) {
+console.info(key+' --> '+value);
+                attrValue = domElement.getAttr(key);
+console.info(key+'\'s attrValue: '+attrValue);
+                if (attrValue) {
+console.info('switch '+value.toLowerCase());
+                    switch (value.toLowerCase()) {
+                        case 'boolean':
+                            validValue = attrValue.validateBoolean();
+                            attrValue = (attrValue==='true');
+                            break;
+                        case 'number':
+                            validValue = attrValue.validateFloat();
+                            attrValue = parseFloat(attrValue);
+                            break;
+                        case 'date':
+                            validValue = attrValue.validateDate();
+                            attrValue = attrValue.toDate();
+                            break;
+                        case 'string':
+                            validValue = true;
+                            break;
+                        default:
+                            validValue = false;
+                    }
+console.info('validValue --> '+validValue);
+                    validValue && domElement.setValueOnce(key, attrValue);
+                }
+            });
+        },
+
+       /**
         * Binds a model to the itag-element, making element.model equals the bound model.
         * Immediately syncs the itag with the new model-data.
         *
@@ -495,6 +544,7 @@ module.exports = function (window) {
             var instance = this,
                 stringifiedData, prevContent, observer;
             if (element.isItag()) {
+                element.removeAttr('bound-model');
                 if (NATIVE_OBJECT_OBSERVE) {
                     observer = element.getData('_observer');
                     observer && Object.unobserve(element.model, observer);
@@ -527,35 +577,6 @@ module.exports = function (window) {
                     }
                 }
             }
-        },
-
-       /**
-        * Copies the attibute-values into element.model.
-        * Only processes the attributes that are defined through the Itag-class its `attrs`-property.
-        *
-        * @method attrsToModel
-        * @param domElement {HTMLElement} the itag that should be processed.
-        * @for itagCore
-        * @since 0.0.1
-        */
-        attrsToModel: function(domElement) {
-            var attrs = domElement._attrs,
-                attrValue;
-            attrs.each(function(value, key) {
-                attrValue = domElement.getAttr(key);
-                switch (value.toLowerCase()) {
-                    case 'boolean':
-                        attrValue = (attrValue==='true');
-                        break;
-                    case 'number':
-                        attrValue = parseFloat(attrValue);
-                        break;
-                    case 'date':
-                        attrValue = attrValue.toDate();
-                        break;
-                }
-                domElement.setValueOnce(key, attrValue);
-            });
         },
 
        /**
@@ -914,7 +935,7 @@ module.exports = function (window) {
             // sync, but do this after the element is created:
             // in the next eventcycle:
             asyncSilent(function(){
-                var needsToBind = false;
+                var needsToBind = (domElement.getAttr('bound-model')==='true');
                 // only if no modelbinding is needed, we can directly init, sync and make ready,
                 // otherwise we need to make this done by  `bindModel`
                 BINDING_LIST.some(function(value, selector) {
@@ -1021,20 +1042,34 @@ module.exports = function (window) {
     */
     DOCUMENT.refreshItags = function(force) {
         var instance = this,
-            list, len, i, itagElement;
+            list, len, i, itagElement, needRefresh, stringifiedModel;
         if (!NATIVE_OBJECT_OBSERVE || force) {
             list = instance.getItags();
             len = list.length;
             allowedToRefreshItags = false; // prevent setTimeout to fall into loop
-            // (len===0) || console.info('refreshing Itags');
-(len===0) || console.log('refreshing Itags');
+            (len===0) || console.log('refreshing Itags');
             for (i=0; i<len; i++) {
                 itagElement = list[i];
-                // because itagElement could be removed intermediste, we need to check if it's there
+                // because itagElement could be removed intermediate, we need to check if it's there
                 if (itagElement && itagElement.isRendered && itagElement.isRendered()) {
-                    itagCore.modelToAttrs(itagElement);
-                    itagElement.syncUI();
-                    itagElement.hasClass('focussed') && manageFocus(itagElement);
+                    needRefresh = false;
+                    try {
+                        stringifiedModel = JSON.stringify(itagElement.model);
+                        if (stringifiedModel!==itagElement.getData('_bkpModel')) {
+                            needRefresh = true;
+                            itagElement.setData('_bkpModel', stringifiedModel);
+                        }
+                    }
+                    catch (err) {
+                        console.warn('Invalid model-structure --> will asume refresh is needed. Itag:');
+                        console.warn(itagElement);
+                        needRefresh = true;
+                    }
+                    if (needRefresh) {
+                        itagCore.modelToAttrs(itagElement);
+                        itagElement.syncUI();
+                        itagElement.hasClass('focussed') && manageFocus(itagElement);
+                    }
                 }
             }
             allowedToRefreshItags = true;
@@ -1411,7 +1446,7 @@ module.exports = function (window) {
         * @chainable
         * @since 0.0.1
         */
-        ElementPrototype.bindModel = function(model, selector, fineGrain) {
+        ElementPrototype.bindModel = function(model, selector, fineGrain, removeListener) {
             var instance = this,
                 listener, elements;
             if ((typeof selector === 'string') && (selector.length>0) && !BINDING_LIST[selector]) {
@@ -1424,7 +1459,7 @@ module.exports = function (window) {
                     var element = e.target;
                     itagCore.bindModel(element, (typeof fineGrain==='function') ? fineGrain(element, model) : model);
                     // element.selfOnceAfter is not available yet: listen through Event:
-                    Event.onceAfter(
+                    removeListener && Event.onceAfter(
                         NODE_REMOVE,
                         function() {
                             listener.detach();
