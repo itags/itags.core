@@ -39,7 +39,7 @@ var NAME = '[itags.core]: ',
     ATTRIBUTE_REMOVE = ATTRIBUTE+REMOVE,
     ATTRIBUTE_CHANGE = ATTRIBUTE+CHANGE,
     ATTRIBUTE_INSERT = ATTRIBUTE+INSERT,
-    DELAYED_EVT_TIME = 500,
+    DELAYED_EVT_TIME = 100,
     NATIVE_OBJECT_OBSERVE = !!Object.observe,
     /**
      * Internal hash containing the names of members which names should be transformed
@@ -237,6 +237,11 @@ module.exports = function (window) {
                         .syncUI();
             }
             return instance;
+        },
+
+        setValueOnce: function(key, value) {
+            var model = this.model;
+            model[key] || (model[key]=value);
         },
 
        /**
@@ -504,6 +509,7 @@ module.exports = function (window) {
                     element.setData('_observer', observer);
                 }
                 if (!element.vnode.ce_initialized) {
+                    instance.attrsToModel(element);
                     element.initUI(PROTO_SUPPORTED ? null : element.__proto__.constructor);
                 }
                 element.syncUI();
@@ -534,7 +540,6 @@ module.exports = function (window) {
         */
         attrsToModel: function(domElement) {
             var attrs = domElement._attrs,
-                model = domElement.model,
                 attrValue;
             attrs.each(function(value, key) {
                 attrValue = domElement.getAttr(key);
@@ -549,7 +554,7 @@ module.exports = function (window) {
                         attrValue = attrValue.toDate();
                         break;
                 }
-                model[key] = attrValue;
+                domElement.setValueOnce(key, attrValue);
             });
         },
 
@@ -671,7 +676,8 @@ module.exports = function (window) {
         * @since 0.0.1
         */
         setupWatchers: function() {
-            var instance = this;
+            var instance = this,
+                types = [];
 
             Event.after(
                 NODE_REMOVE,
@@ -682,6 +688,25 @@ module.exports = function (window) {
                 itagCore.itagFilter
             );
 
+            Event.before(
+                '*:manualfocus',
+                function(e) {
+                    var node = e.target;
+                    if (!node.isRendered()) {
+                        e.halt();
+                        node.itagReady().then(
+                            function() {
+                                // re-emit the focus
+                                node.focus();
+                            }
+                        );
+                    }
+                },
+                function(e) {
+                    return e.target.vnode.isItag;
+                }
+            );
+/*
             // Always watch for attibute change-events:
             // this way, we make the itags responsive for manual domchanges.
             Event.after(
@@ -704,21 +729,23 @@ module.exports = function (window) {
                 },
                 itagCore.itagFilter
             );
-
+*/
             if (!NATIVE_OBJECT_OBSERVE) {
                 Event.finalize(function(e) {
                     var type = e.type;
                     if (allowedToRefreshItags) {
                         if (!MUTATION_EVENTS[type] && !type.endsWith('outside')) {
                             if (DELAYED_FINALIZE_EVENTS[type]) {
+                                types.push(type);
                                 registerDelay || (registerDelay = laterSilent(function() {
-                                    console.info('Event-finalizer will refresh itags because of event: '+e.type);
+                                    console.info('Event-finalizer will delayed-refresh itags because of events: '+JSON.stringify(types));
                                     DOCUMENT.refreshItags();
+                                    types.length = 0;
                                     registerDelay = null;
                                 }, DELAYED_EVT_TIME));
                             }
                             else {
-                                console.info('Event-finalizer will refresh itags because of event: '+e.type);
+                                console.info('Event-finalizer will refresh itags because of event: '+type);
                                 DOCUMENT.refreshItags();
                             }
                         }
@@ -922,8 +949,8 @@ module.exports = function (window) {
     * @since 0.0.1
     */
     manageFocus = function(domElement) {
-        var focusManagerNode = domElement.getElement('[focusmanager].focussed');
-        // focusManagerNode && focusManagerNode.focus();
+        var focusManagerNode = domElement.getElement('.focussed[fm-manage]');
+        focusManagerNode && focusManagerNode.focus(true);
     };
 
    /**
@@ -993,14 +1020,14 @@ module.exports = function (window) {
     * @since 0.0.1
     */
     DOCUMENT.refreshItags = function(force) {
-        console.info('refreshing Itags');
         var instance = this,
             list, len, i, itagElement;
         if (!NATIVE_OBJECT_OBSERVE || force) {
             list = instance.getItags();
             len = list.length;
             allowedToRefreshItags = false; // prevent setTimeout to fall into loop
-            (len===0) || console.info('refreshing Itags');
+            // (len===0) || console.info('refreshing Itags');
+(len===0) || console.log('refreshing Itags');
             for (i=0; i<len; i++) {
                 itagElement = list[i];
                 // because itagElement could be removed intermediste, we need to check if it's there
