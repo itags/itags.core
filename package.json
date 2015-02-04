@@ -35,6 +35,7 @@
         "io": "itsa/io",
         "utils": "itsa/utils",
         "polyfill": "itsa/polyfill",
+        "event": "itsa/event",
         "event-dom": "itsa/event-dom",
         "vdom": "itsa/vdom"
     },

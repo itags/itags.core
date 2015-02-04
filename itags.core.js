@@ -75,12 +75,13 @@ module.exports = function (window) {
         itagsThatNeedsEvent = {},
         BINDING_LIST = {},
         itagCore, MUTATION_EVENTS, PROTECTED_MEMBERS, EXTRA_BASE_MEMBERS, Event, IO,
-        setTimeoutBKP, setIntervalBKP, setImmediateBKP, DEFAULT_DELAYED_FINALIZE_EVENTS,
-        ATTRIBUTE_EVENTS, registerDelay, manageFocus, mergeFlat,  DELAYED_FINALIZE_EVENTS;
+        DEFAULT_DELAYED_FINALIZE_EVENTS, ATTRIBUTE_EVENTS, registerDelay, manageFocus,
+        mergeFlat,  DELAYED_FINALIZE_EVENTS;
 
     require('vdom')(window);
     Event = require('event-dom')(window);
     IO = require('io')(window);
+    require('event/extra/timer-finalize.js');
 
 /*jshint boss:true */
     if (itagCore=window._ItagCore) {
@@ -142,7 +143,9 @@ module.exports = function (window) {
                 };
                 superDestroy(constructor || instance.constructor);
                 instance.detachAll();
-                instance.model = null;
+                // DO NOT set model to null --> it might be refered to asynchronously
+                // We don't need to bother: the node gets out of the dom and will really be destroyed after
+                // 1 minute: because no-one needs it, the GC should clean up model when no longer needed
             }
             reInitialize || Object.protectedProp(vnode, 'ce_destroyed', true);
             return instance;
@@ -200,6 +203,17 @@ module.exports = function (window) {
         */
         isRendered: function() {
             return !!this.getData('itagRendered');
+        },
+
+       /**
+        * Flag that tells wether the itag is destoyed.
+        *
+        * @method isDestroyed
+        * @return {Boolean} whether the itag is destroyed.
+        * @since 0.0.1
+        */
+        isDestroyed: function() {
+            return !!this.vnode.ce_destroyed;
         },
 
        /**
@@ -499,11 +513,8 @@ module.exports = function (window) {
             var attrs = domElement._attrs,
                 attrValue, validValue;
             attrs.each(function(value, key) {
-console.info(key+' --> '+value);
                 attrValue = domElement.getAttr(key);
-console.info(key+'\'s attrValue: '+attrValue);
                 if (attrValue) {
-console.info('switch '+value.toLowerCase());
                     switch (value.toLowerCase()) {
                         case 'boolean':
                             validValue = attrValue.validateBoolean();
@@ -523,7 +534,6 @@ console.info('switch '+value.toLowerCase());
                         default:
                             validValue = false;
                     }
-console.info('validValue --> '+validValue);
                     validValue && domElement.setValueOnce(key, attrValue);
                 }
             });
@@ -727,34 +737,12 @@ console.info('validValue --> '+validValue);
                     return e.target.vnode.isItag;
                 }
             );
-/*
-            // Always watch for attibute change-events:
-            // this way, we make the itags responsive for manual domchanges.
-            Event.after(
-                ATTRIBUTE_EVENTS,
-                function(e) {
-                    var element = e.target;
-                    instance.attrsToModel(element);
-                    if (!NATIVE_OBJECT_OBSERVE) {
-                        console.info('Attribute mutation-event will refresh itags because of event '+e.type);
-                        DOCUMENT.refreshItags();
-                    }
-                    // this affect modeldata, the event.finalizer will sync the UI
-                    // AFTER synced, we might need to refocus --> that's why refocussing
-                    // is done async.
-                    if (element.hasClass('focussed')) {
-                        asyncSilent(function() {
-                            manageFocus(element);
-                        });
-                    }
-                },
-                itagCore.itagFilter
-            );
-*/
+
             if (!NATIVE_OBJECT_OBSERVE) {
                 Event.finalize(function(e) {
                     var type = e.type;
-                    if (allowedToRefreshItags) {
+                    if (allowedToRefreshItags && !e._noRender && (!e.status || !e.status.renderPrevented)) {
+                        e.rendered = true;
                         if (!MUTATION_EVENTS[type] && !type.endsWith('outside')) {
                             if (DELAYED_FINALIZE_EVENTS[type]) {
                                 types.push(type);
@@ -777,55 +765,6 @@ console.info('validValue --> '+validValue);
                     console.info('IO-finalizer will refresh itags');
                     allowedToRefreshItags && DOCUMENT.refreshItags();
                 });
-
-                // we patch the window timer functions in order to run `refreshItags` afterwards:
-                setTimeoutBKP = window.setTimeout;
-                setIntervalBKP = window.setInterval;
-
-                window.setTimeout = function() {
-                    var args = arguments;
-                    if (allowedToRefreshItags) {
-                        args[0] = (function(originalFn) {
-                            return function() {
-                                originalFn();
-                                console.info('setTimeOut will refresh itags');
-                                DOCUMENT.refreshItags();
-                            };
-                        })(args[0]);
-                    }
-                    setTimeoutBKP.apply(this, arguments);
-                };
-
-                window.setInterval = function() {
-                    var args = arguments;
-                    if (allowedToRefreshItags) {
-                        args[0] = (function(originalFn) {
-                            return function() {
-                                originalFn();
-                                console.info('setInterval will refresh itags');
-                                DOCUMENT.refreshItags();
-                            };
-                        })(args[0]);
-                    }
-                    setIntervalBKP.apply(this, arguments);
-                };
-
-                if (typeof window.setImmediate !== 'undefined') {
-                    setImmediateBKP = window.setInterval;
-                    window.setImmediate = function() {
-                        var args = arguments;
-                        if (allowedToRefreshItags) {
-                            args[0] = (function(originalFn) {
-                                return function() {
-                                    originalFn();
-                                    console.info('setImmediate will refresh itags');
-                                    DOCUMENT.refreshItags();
-                                };
-                            })(args[0]);
-                        }
-                        setImmediateBKP.apply(this, arguments);
-                    };
-                }
             }
 
             if (PROTO_SUPPORTED) {
@@ -1061,9 +1000,8 @@ console.info('validValue --> '+validValue);
                         }
                     }
                     catch (err) {
-                        console.warn('Invalid model-structure --> will asume refresh is needed. Itag:');
+                        console.warn('Invalid model-structure: possibly it is cycle referenced --> will NEVER refresh the Itag:');
                         console.warn(itagElement);
-                        needRefresh = true;
                     }
                     if (needRefresh) {
                         itagCore.modelToAttrs(itagElement);
