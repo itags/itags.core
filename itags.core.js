@@ -514,6 +514,7 @@ module.exports = function (window) {
         * @since 0.0.1
         */
         attrsToModel: function(domElement) {
+console.warn('attrsToModel');
             var attrs = domElement._attrs,
                 attrValue, validValue;
             attrs.each(function(value, key) {
@@ -557,6 +558,7 @@ module.exports = function (window) {
         * @since 0.0.1
         */
         bindModel: function(element, model, mergeCurrent) {
+console.warn('bindModel');
             var instance = this,
                 stringifiedData, prevContent, observer;
             if (element.isItag() && (element.model!==model)) {
@@ -619,6 +621,7 @@ module.exports = function (window) {
         * @since 0.0.1
         */
         modelToAttrs: function(domElement) {
+console.warn('modelToAttrs');
             var attrs = domElement._attrs,
                 model = domElement.model,
                 newAttrs = [];
@@ -636,6 +639,7 @@ module.exports = function (window) {
         * @since 0.0.1
         */
         renderDomElements: function(domElementConstructor) {
+console.warn('renderDomElements');
             var itagName = domElementConstructor.$$itag,
                 pseudo = domElementConstructor.$$pseudo,
                 itagElements = pseudo ? DOCUMENT.getAll(itagName+'[is="'+pseudo+'"]') : DOCUMENT.getAll(itagName+':not([is])'),
@@ -656,6 +660,7 @@ module.exports = function (window) {
         * @since 0.0.1
         */
         retrieveModel: function(domElement) {
+console.warn('retrieveModel');
             // try to load the model from a stored inner div-node
             var dataNode = domElement.getElement('span.itag-data'),
                 stringifiedData;
@@ -753,6 +758,7 @@ module.exports = function (window) {
         * @since 0.0.1
         */
         setRendered: function(domElement) {
+console.warn('setRendered');
             domElement.setClass(CLASS_ITAG_RENDERED, null, null, true);
             domElement.setData('itagRendered', true);
             domElement._itagReady || (domElement._itagReady=window.Promise.manage());
@@ -766,6 +772,7 @@ module.exports = function (window) {
         * @since 0.0.1
         */
         setupEmitters: function() {
+console.warn('setRendered');
             Event.after('*:'+NODE_CONTENT_CHANGE, function(e) {
                 var element = e.target;
                 /**
@@ -781,7 +788,7 @@ module.exports = function (window) {
         },
 
         setContentVisibility: function(ItagClass, value) {
-            (typeof value === 'boolean') && ItagClass.mergePrototypes({contentHidden: !value}, true);
+            (typeof value === 'boolean') && ItagClass.mergePrototypes({contentHidden: !value}, true, false, true);
         },
 
        /**
@@ -917,6 +924,7 @@ module.exports = function (window) {
         * @since 0.0.1
         */
         upgradeElement: function(domElement, domElementConstructor) {
+console.warn('upgradeElement');
             var instance = this,
                 proto = domElementConstructor.prototype,
                 observer;
@@ -1045,6 +1053,7 @@ module.exports = function (window) {
     * @since 0.0.1
     */
     DOCUMENT.createElement = function(tag) {
+console.warn('createElement');
         var ItagClass = window.ITAGS[tag.toLowerCase()];
         if (ItagClass) {
             return new ItagClass();
@@ -1076,6 +1085,7 @@ module.exports = function (window) {
     * @since 0.0.1
     */
     DOCUMENT.refreshItags = function(force) {
+console.warn('refreshItags');
         var instance = this,
             list, len, i, itagElement, needRefresh, stringifiedModel;
         if (!NATIVE_OBJECT_OBSERVE || force) {
@@ -1151,13 +1161,14 @@ module.exports = function (window) {
         */
         FunctionPrototype.mergePrototypes = function(prototypes, force, silent) {
             var instance = this,
+                overwriteProtected = arguments[3], // hidden private feature
                 itagEmitterName;
             if (!instance.$$itag) {
                 // default mergePrototypes
-                instance._mergePrototypes.apply(instance, arguments);
+                instance._mergePrototypes(prototypes, force);
             }
             else {
-                instance._mergePrototypes(prototypes, force, ITAG_METHODS, PROTECTED_MEMBERS);
+                instance._mergePrototypes(prototypes, force, ITAG_METHODS, overwriteProtected ? null : PROTECTED_MEMBERS);
                 /**
                 * Emitted when prototypes are set on an existing Itag-Class.
                 *
@@ -1507,6 +1518,7 @@ module.exports = function (window) {
          * @since 0.0.1
         */
         ElementPrototype.setAttribute = function(attributeName, value, silent) {
+console.warn('setAttribute '+this.getTagName());
             var instance = this,
                 valueType;
             if (!instance.isItag() || silent) {
@@ -1514,7 +1526,7 @@ module.exports = function (window) {
             }
             else {
 /*jshint boss:true */
-                if (valueType=instance._attrs[attributeName]) {
+                if (instance._attrs && (valueType=instance._attrs[attributeName])) {
 /*jshint boss:false */
                     switch (valueType.toLowerCase()) {
                         case 'boolean':

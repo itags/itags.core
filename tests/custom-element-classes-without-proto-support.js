@@ -67,24 +67,34 @@
                 expect(s.x).be.equal(11);
                 expect(s.y).be.equal(22);
             });
-            it('Destroy cannot be called manually', function () {
-                s.destroy();
-                expect(s.x).be.equal(11);
-                expect(s.y).be.equal(22);
-                s.destroyUI();
-                expect(s.x).be.equal(11);
-                expect(s.y).be.equal(22);
-            });
-            it('Destroy', function (done) {
-                s.remove();
-                setTimeout(function() {
-                    expect(s.x).be.equal(-1);
-                    expect(s.y).be.equal(-2);
-                    s.destroyUI(); // should end into NOOP
-                    expect(s.x).be.equal(-1);
-                    expect(s.y).be.equal(-2);
+
+            it('Destroy cannot be called manually', function (done) {
+                var s2 = new IShape();
+                DOCUMENT.body.append(s2);
+                s2.itagReady().then(function() {
+                    expect(s2.destroy===undefined).to.be.true;
+                    expect(s2.x).be.equal(10);
+                    expect(s2.y).be.equal(20);
+                    s2.destroyUI();
+                    expect(s2.x).be.equal(10);
+                    expect(s2.y).be.equal(20);
+                    s2.remove();
                     done();
-                }, 50);
+                }).catch(done);
+            });
+
+            it('Destroy', function (done) {
+                s.itagReady().then(function() {
+                    s.remove();
+                    setTimeout(function() {
+                        expect(s.x).be.equal(-1);
+                        expect(s.y).be.equal(-2);
+                        s.destroyUI(); // should end into NOOP
+                        expect(s.x).be.equal(-1);
+                        expect(s.y).be.equal(-2);
+                        done();
+                    }, 50);
+                }).catch(done);
             });
 
         });
@@ -124,25 +134,35 @@
                 expect(c.bg).be.equal('#111');
             });
 
-            it('Destroy cannot be called manually', function () {
-                c.destroyUI(); // should end into NOOP
-                c.$superProp('destroyUI'); // should end into NOOP
-                expect(c.x).be.equal(101);
-                expect(c.y).be.equal(22);
-            });
-            it('Destroy', function (done) {
-                c.remove();
-                setTimeout(function() {
-                    expect(c.x).be.equal(-1);
-                    expect(c.y).be.equal(-2);
-                    expect(c.r).be.equal(-13);
-                    c.destroyUI(); // should end into NOOP
-                    c.$superProp('destroyUI'); // should end into NOOP
-                    expect(c.x).be.equal(-1);
-                    expect(c.y).be.equal(-2);
-                    expect(c.r).be.equal(-13);
+            it('Destroy cannot be called manually', function (done) {
+                var c2 = new ICircle();
+                DOCUMENT.body.append(c2);
+                c2.itagReady().then(function() {
+                    c2.destroyUI(); // should end into NOOP
+                    c2.$superProp('destroyUI'); // should end into NOOP
+                    expect(c2.x).be.equal(100);
+                    expect(c2.y).be.equal(20);
+                    expect(c2.r).be.equal(5);
+                    c2.remove();
                     done();
-                }, 50);
+                }).catch(done);
+            });
+
+            it('Destroy', function (done) {
+                c.itagReady().then(function() {
+                    c.remove();
+                    setTimeout(function() {
+                        expect(c.x).be.equal(-1);
+                        expect(c.y).be.equal(-2);
+                        expect(c.r).be.equal(-13);
+                        c.destroyUI(); // should end into NOOP
+                        c.$superProp('destroyUI'); // should end into NOOP
+                        expect(c.x).be.equal(-1);
+                        expect(c.y).be.equal(-2);
+                        expect(c.r).be.equal(-13);
+                        done();
+                    }, 50);
+                }).catch(done);
             });
 
         });
