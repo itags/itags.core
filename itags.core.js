@@ -164,7 +164,7 @@ module.exports = function (window) {
         initUI: function(constructor, reInitialize) {
             var instance = this,
                 vnode = instance.vnode,
-                superInit;
+                superInit, serverModel;
             if ((reInitialize || !vnode.ce_initialized) && !vnode.removedFromDOM && !vnode.ce_destroyed) {
                 superInit = function(constructor) {
                     var classCarierBKP = instance.__classCarier__;
@@ -176,19 +176,31 @@ module.exports = function (window) {
                     // don't call `hasOwnProperty` directly on obj --> it might have been overruled
                     Object.prototype.hasOwnProperty.call(constructor.prototype, '_initUI') && constructor.prototype._initUI.call(instance);
                 };
-                if (reInitialize) {
-                    instance.setHTML(vnode.ce_initContent);
-                }
-                else {
-                    // already synced on the server:
+                if (!reInitialize) {
+                    // First time init.
+                    // If already rendered on the server:
                     // bind the stored json-data on the property `model`:
-                    itagCore.retrieveModel(instance);
-                    Object.protectedProp(vnode, 'ce_initContent', instance.getHTML());
+                    if (instance.hasClass(CLASS_ITAG_RENDERED)) {
+                        // already rendered on the server
+                        if (!RUNNING_ON_NODE) {
+                            serverModel = itagCore.extractModel(instance);
+                            if (serverModel && !vnode.ce_boundModel) {
+                                instance.model = serverModel;
+                            }
+                        }
+                    }
+                    else {
+                        Object.protectedProp(vnode, 'ce_designNode', itagCore.extractContent(instance));
+                    }
                 }
                 superInit(constructor || instance.constructor);
                 Object.protectedProp(vnode, 'ce_initialized', true);
             }
             return instance;
+        },
+
+        getDesignNode: function() {
+            return this.vnode.ce_designNode;
         },
 
        /**
@@ -278,11 +290,35 @@ module.exports = function (window) {
         syncUI: function() {
             var instance = this,
                 attrs = instance._attrs,
-                vnode = instance.vnode;
+                vnode = instance.vnode,
+                stringifiedData, vChildNodes, lastVChild;
             if (vnode.ce_initialized && !vnode.removedFromDOM && !vnode.ce_destroyed) {
                 vnode._setUnchangableAttrs(attrs);
                 instance._syncUI.apply(instance, arguments);
                 vnode._setUnchangableAttrs(null);
+                if (RUNNING_ON_NODE) {
+                    // store the modeldata inside a commentNode at the end of innerHTML:
+                    try {
+                        stringifiedData = JSON.stringify(instance.model);
+                        // we need to patch directly on the vnode --> modification of commentNodes
+                        // have no customized methods on the Element, but they are patchable through Element.vnode:
+                        vChildNodes = vnode.vChildNodes;
+                        lastVChild = vChildNodes[vChildNodes.length-1];
+                        if (lastVChild && (lastVChild.nodeType===8) && (lastVChild.text.startsWith('i-model:{'))) {
+                            // modeldata was already set --> overwrite it
+                            lastVChild.text = 'i-model:'+stringifiedData;
+                            // lastVChild.domNode.nodeValue = unescapeEntities(lastVChild.text);
+                            lastVChild.domNode.nodeValue = lastVChild.text;
+                        }
+                        else {
+                            // insert modeldata
+                            instance.append('<!--i-model:'+stringifiedData+'-->');
+                        }
+                    }
+                    catch(e) {
+                        console.warn(e);
+                    }
+                }
             }
             return instance;
         },
@@ -560,9 +596,10 @@ console.warn('attrsToModel');
         bindModel: function(element, model, mergeCurrent) {
 console.warn('bindModel');
             var instance = this,
-                stringifiedData, prevContent, observer;
+                observer;
             if (element.isItag() && (element.model!==model)) {
                 element.removeAttr('bound-model');
+                Object.protectedProp(element.vnode, 'ce_boundModel', true);
                 if (NATIVE_OBJECT_OBSERVE) {
                     observer = element.getData('_observer');
                     observer && Object.unobserve(element.model, observer);
@@ -583,18 +620,6 @@ console.warn('bindModel');
                 }
                 element.syncUI();
                 element.itagRendered || instance.setRendered(element);
-                if (RUNNING_ON_NODE) {
-                    // store the modeldata inside an inner div-node
-                    try {
-                        stringifiedData = JSON.stringify(model);
-                        prevContent = element.getElement('span.itag-data');
-                        prevContent && prevContent.remove();
-                        element.prepend('<span class="itag-data">'+stringifiedData+'</span>');
-                    }
-                    catch(e) {
-                        console.warn(e);
-                    }
-                }
             }
         },
 
@@ -654,27 +679,41 @@ console.warn('renderDomElements');
        /**
         * Retrieves modeldata set by the server inside the itag-element and binds this data into element.model
         *
-        * @method retrieveModel
+        * @method extractModel
         * @param domElement {HTMLElement} the itag that should be processed.
         * @return {Object}
         * @since 0.0.1
         */
-        retrieveModel: function(domElement) {
-console.warn('retrieveModel');
-            // try to load the model from a stored inner div-node
-            var dataNode = domElement.getElement('span.itag-data'),
-                stringifiedData;
-            if (dataNode) {
+        extractModel: function(domElement) {
+console.warn('extractModel');
+            var vnode = domElement.vnode,
+                vChildNodes = vnode.vChildNodes,
+                lastVChild = vChildNodes[vChildNodes.length-1],
+                modelData;
+            if (lastVChild && (lastVChild.nodeType===8) && (lastVChild.text.startsWith('i-model:{'))) {
+                // modeldata was set
                 try {
-                    stringifiedData = dataNode.getHTML();
-                    domElement.model = JSON.parseWithDate(stringifiedData);
-                    dataNode.remove(true);
+                    modelData = JSON.parseWithDate(lastVChild.text);
                 }
                 catch(e) {
+                    modelData = null;
                     console.warn(e);
                 }
+                vnode._removeChild(lastVChild);
             }
-            return domElement.model;
+            return modelData;
+        },
+        extractContent: function(domElement) {
+console.warn('extractContent');
+            var vnode = domElement.vnode,
+                vChildNodes = vnode.vChildNodes,
+                firstVChild = vChildNodes[0],
+                container = DOCUMENT.createElement('div');
+            if (firstVChild && (firstVChild.nodeType===8) && (!firstVChild.text.startsWith('i-model:{'))) {
+                container.append(firstVChild.text);
+            }
+            domElement.empty();
+            return container;
         },
 
        /**
