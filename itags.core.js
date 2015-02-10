@@ -188,9 +188,10 @@ module.exports = function (window) {
                                 instance.model = serverModel;
                             }
                         }
+                        Object.protectedProp(vnode, 'ce_designNode', itagCore.extractContent(instance));
                     }
                     else {
-                        Object.protectedProp(vnode, 'ce_designNode', itagCore.extractContent(instance));
+                        Object.protectedProp(vnode, 'ce_designNode', itagCore.extractContent(instance, true));
                     }
                 }
                 superInit(constructor || instance.constructor);
@@ -312,7 +313,7 @@ module.exports = function (window) {
                         }
                         else {
                             // insert modeldata
-                            instance.append('<!--i-model:'+stringifiedData+'-->');
+                            instance.prepend('<!--i-model:'+stringifiedData+'-->');
                         }
                     }
                     catch(e) {
@@ -550,7 +551,7 @@ module.exports = function (window) {
         * @since 0.0.1
         */
         attrsToModel: function(domElement) {
-console.warn('attrsToModel');
+            console.log(NAME+'attrsToModel');
             var attrs = domElement._attrs,
                 attrValue, validValue;
             attrs.each(function(value, key) {
@@ -594,7 +595,7 @@ console.warn('attrsToModel');
         * @since 0.0.1
         */
         bindModel: function(element, model, mergeCurrent) {
-console.warn('bindModel');
+            console.log(NAME+'bindModel');
             var instance = this,
                 observer;
             if (element.isItag() && (element.model!==model)) {
@@ -604,7 +605,13 @@ console.warn('bindModel');
                     observer = element.getData('_observer');
                     observer && Object.unobserve(element.model, observer);
                 }
+
+
+// here is the problem
                 mergeCurrent && (model.merge(element.model, {full: true}));
+
+
+
                 element.model = model;
                 if (NATIVE_OBJECT_OBSERVE) {
                     observer = function() {
@@ -624,6 +631,74 @@ console.warn('bindModel');
         },
 
        /**
+        * Retrieves modeldata set by the server inside the itag-element and binds this data into element.model
+        *
+        * @method extractModel
+        * @param domElement {HTMLElement} the itag that should be processed.
+        * @return {Object|null} the modeldata or null when not supplied
+        * @since 0.0.1
+        */
+        extractModel: function(domElement) {
+            console.log(NAME+'extractModel');
+            var vnode = domElement.vnode,
+                vChildNodes = vnode.vChildNodes,
+                lastPos = vChildNodes.length - 1,
+                i = -1,
+                modelData, vChildNode, content;
+            // walk through the vChilds and handle the model-data:
+            while ((++i<lastPos) && (modelData===undefined)) {
+                vChildNode = vChildNodes[i];
+                if ((vChildNode.nodeType===8) && (vChildNode.text.startsWith('i-model:{'))) {
+                    // modeldata was set
+                    try {
+                        content = vChildNode.text.replaceAll('&lt;', '<').replaceAll('&gt;', '>');
+                        modelData = JSON.parseWithDate(content.substr(8));
+                    }
+                    catch(e) {
+                        modelData = null;
+                        console.warn(e);
+                    }
+                    vnode._removeChild(vChildNode);
+                }
+            }
+            return modelData || null;
+        },
+
+       /**
+        * Retrieves content set by the definition of the iTag. The content should be inside a comment-node
+        * inside the itag. The returnvalue is a container-node (DIV) where the content
+        * -as is specified by the comment-node- lies within as true HTML.
+        *
+        * @method extractContent
+        * @param domElement {HTMLElement} the itag that should be processed.
+        * @return {HTMLElement} a DIV-container with HTML inside
+        * @since 0.0.1
+        */
+        extractContent: function(domElement, empty) {
+            console.log(NAME+'extractContent');
+            var vnode = domElement.vnode,
+                vChildNodes = vnode.vChildNodes,
+                lastPos = vChildNodes.length - 1,
+                i = -1,
+                container = DOCUMENT.createElement('div'),
+                content, vChildNode;
+            // walk through the vChilds and handle the model-data:
+            while ((++i<lastPos) && !content) {
+                vChildNode = vChildNodes[i];
+                if ((vChildNode.nodeType===8) && (!vChildNode.text.startsWith('i-model:{'))) {
+                    content = vChildNode.text.trim().replaceAll('&lt;', '<').replaceAll('&gt;', '>');
+                    // to support nested comments (in case of nested iTags),
+                    // we transform any text looking like --!> into -->
+                    content = content.replaceAll('<!==', '<!--').replaceAll('==>', '-->');
+                    container.append(content);
+                    empty || vnode._removeChild(vChildNode);
+                }
+            }
+            empty && domElement.empty();
+            return container;
+        },
+
+       /**
         * Function that can be used ad the `filterFn` of event-listeners.
         * Returns true for any HTML-element that is a rendered itag.
         *
@@ -633,6 +708,7 @@ console.warn('bindModel');
         * @since 0.0.1
         */
         itagFilter: function(e) {
+            console.log(NAME+'itagFilter');
             var node = e.target;
             return node.vnode.isItag && node.getData('itagRendered');
         },
@@ -646,7 +722,7 @@ console.warn('bindModel');
         * @since 0.0.1
         */
         modelToAttrs: function(domElement) {
-console.warn('modelToAttrs');
+            console.log(NAME+'modelToAttrs');
             var attrs = domElement._attrs,
                 model = domElement.model,
                 newAttrs = [];
@@ -664,7 +740,7 @@ console.warn('modelToAttrs');
         * @since 0.0.1
         */
         renderDomElements: function(domElementConstructor) {
-console.warn('renderDomElements');
+            console.log(NAME+'renderDomElements');
             var itagName = domElementConstructor.$$itag,
                 pseudo = domElementConstructor.$$pseudo,
                 itagElements = pseudo ? DOCUMENT.getAll(itagName+'[is="'+pseudo+'"]') : DOCUMENT.getAll(itagName+':not([is])'),
@@ -674,46 +750,6 @@ console.warn('renderDomElements');
                 itagElement = itagElements[i];
                 this.upgradeElement(itagElement, domElementConstructor);
             }
-        },
-
-       /**
-        * Retrieves modeldata set by the server inside the itag-element and binds this data into element.model
-        *
-        * @method extractModel
-        * @param domElement {HTMLElement} the itag that should be processed.
-        * @return {Object}
-        * @since 0.0.1
-        */
-        extractModel: function(domElement) {
-console.warn('extractModel');
-            var vnode = domElement.vnode,
-                vChildNodes = vnode.vChildNodes,
-                lastVChild = vChildNodes[vChildNodes.length-1],
-                modelData;
-            if (lastVChild && (lastVChild.nodeType===8) && (lastVChild.text.startsWith('i-model:{'))) {
-                // modeldata was set
-                try {
-                    modelData = JSON.parseWithDate(lastVChild.text);
-                }
-                catch(e) {
-                    modelData = null;
-                    console.warn(e);
-                }
-                vnode._removeChild(lastVChild);
-            }
-            return modelData;
-        },
-        extractContent: function(domElement) {
-console.warn('extractContent');
-            var vnode = domElement.vnode,
-                vChildNodes = vnode.vChildNodes,
-                firstVChild = vChildNodes[0],
-                container = DOCUMENT.createElement('div');
-            if (firstVChild && (firstVChild.nodeType===8) && (!firstVChild.text.startsWith('i-model:{'))) {
-                container.append(firstVChild.text);
-            }
-            domElement.empty();
-            return container;
         },
 
        /**
@@ -752,6 +788,7 @@ console.warn('extractContent');
         * @since 0.0.1
         */
         setDirectEventResponse :function(ItagClass, domEvents) {
+            console.log(NAME+'setDirectEventResponse');
             var itag = ItagClass.$$itag;
             if (!NATIVE_OBJECT_OBSERVE && itag) {
                 Array.isArray(domEvents) || (domEvents=[domEvents]);
@@ -797,7 +834,7 @@ console.warn('extractContent');
         * @since 0.0.1
         */
         setRendered: function(domElement) {
-console.warn('setRendered');
+            console.log(NAME+'setRendered');
             domElement.setClass(CLASS_ITAG_RENDERED, null, null, true);
             domElement.setData('itagRendered', true);
             domElement._itagReady || (domElement._itagReady=window.Promise.manage());
@@ -811,7 +848,7 @@ console.warn('setRendered');
         * @since 0.0.1
         */
         setupEmitters: function() {
-console.warn('setRendered');
+            console.log(NAME+'setupEmitters');
             Event.after('*:'+NODE_CONTENT_CHANGE, function(e) {
                 var element = e.target;
                 /**
@@ -827,6 +864,7 @@ console.warn('setRendered');
         },
 
         setContentVisibility: function(ItagClass, value) {
+            console.log(NAME+'setContentVisibility');
             (typeof value === 'boolean') && ItagClass.mergePrototypes({contentHidden: !value}, true, false, true);
         },
 
@@ -837,6 +875,7 @@ console.warn('setRendered');
         * @since 0.0.1
         */
         setupWatchers: function() {
+            console.log(NAME+'setupWatchers');
             var types = [];
 
             Event.after(
@@ -963,7 +1002,7 @@ console.warn('setRendered');
         * @since 0.0.1
         */
         upgradeElement: function(domElement, domElementConstructor) {
-console.warn('upgradeElement');
+            console.log(NAME+'upgradeElement');
             var instance = this,
                 proto = domElementConstructor.prototype,
                 observer;
@@ -1047,6 +1086,7 @@ console.warn('upgradeElement');
     * @since 0.0.1
     */
     manageFocus = function(domElement) {
+        console.log(NAME+'manageFocus');
         var focusManagerNode = domElement.getElement('.focussed[fm-manage]');
         focusManagerNode && focusManagerNode.focus(true);
     };
@@ -1080,6 +1120,7 @@ console.warn('upgradeElement');
     * @since 0.0.1
     */
     DOCUMENT.bindModel = function(model, selector, mergeCurrent, fineGrain) {
+        console.log(NAME+'bindModel');
         return DOCUMENT.documentElement.bindModel(model, selector, mergeCurrent, fineGrain);
     };
 
@@ -1092,7 +1133,7 @@ console.warn('upgradeElement');
     * @since 0.0.1
     */
     DOCUMENT.createElement = function(tag) {
-console.warn('createElement');
+        console.log(NAME+'createElement');
         var ItagClass = window.ITAGS[tag.toLowerCase()];
         if (ItagClass) {
             return new ItagClass();
@@ -1124,7 +1165,7 @@ console.warn('createElement');
     * @since 0.0.1
     */
     DOCUMENT.refreshItags = function(force) {
-console.warn('refreshItags');
+        console.log(NAME+'refreshItags');
         var instance = this,
             list, len, i, itagElement, needRefresh, stringifiedModel;
         if (!NATIVE_OBJECT_OBSERVE || force) {
@@ -1147,6 +1188,8 @@ console.warn('refreshItags');
                     catch (err) {
                         console.warn('Invalid model-structure: possibly it is cycle referenced --> will NEVER refresh the Itag:');
                         console.warn(itagElement);
+                        console.warn('related model:');
+                        console.warn(itagElement.model);
                     }
                     if (needRefresh) {
                         itagCore.modelToAttrs(itagElement);
@@ -1557,7 +1600,6 @@ console.warn('refreshItags');
          * @since 0.0.1
         */
         ElementPrototype.setAttribute = function(attributeName, value, silent) {
-console.warn('setAttribute '+this.getTagName());
             var instance = this,
                 valueType;
             if (!instance.isItag() || silent) {
