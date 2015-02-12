@@ -605,13 +605,7 @@ module.exports = function (window) {
                     observer = element.getData('_observer');
                     observer && Object.unobserve(element.model, observer);
                 }
-
-
-// here is the problem
                 mergeCurrent && (model.merge(element.model, {full: true}));
-
-
-
                 element.model = model;
                 if (NATIVE_OBJECT_OBSERVE) {
                     observer = function() {
@@ -678,10 +672,13 @@ module.exports = function (window) {
             console.log(NAME+'extractContent');
             var vnode = domElement.vnode,
                 vChildNodes = vnode.vChildNodes,
-                lastPos = vChildNodes.length - 1,
+                lastPos = vChildNodes.length,
                 i = -1,
                 container = DOCUMENT.createElement('div'),
                 content, vChildNode;
+            // mark the container with a class -->
+            // so we know we don't need to render the itags anything inside:
+            container.setClass('ce-design-node');
             // walk through the vChilds and handle the model-data:
             while ((++i<lastPos) && !content) {
                 vChildNode = vChildNodes[i];
@@ -690,7 +687,7 @@ module.exports = function (window) {
                     // to support nested comments (in case of nested iTags),
                     // we transform any text looking like --!> into -->
                     content = content.replaceAll('<!==', '<!--').replaceAll('==>', '-->');
-                    container.append(content);
+                    container.vnode.setHTML(content, true);
                     empty || vnode._removeChild(vChildNode);
                 }
             }
@@ -807,7 +804,7 @@ module.exports = function (window) {
                                 delete DELAYED_FINALIZE_EVENTS[domEvent];
                             }
                             // add to the list whenever elements are removed and no itag is in the dom anymore:
-                            Event.after(NODE_REMOVE, function() {
+                            Event.after('UI:'+NODE_REMOVE, function() {
                                 var elementThatNeedsEvent;
                                 itagsThatNeedsEvent[domEvent].some(function(oneItag) {
                                     DOCUMENT.getElement(oneItag, true) && (elementThatNeedsEvent=true);
@@ -817,7 +814,7 @@ module.exports = function (window) {
                             }, itag);
 
                             // remove from the list whenever itag is added in the dom:
-                            Event.after(NODE_INSERT, function() {
+                            Event.after('UI:'+NODE_INSERT, function() {
                                 delete DELAYED_FINALIZE_EVENTS[domEvent];
                             }, itag);
                         }
@@ -879,7 +876,7 @@ module.exports = function (window) {
             var types = [];
 
             Event.after(
-                NODE_REMOVE,
+                'UI:'+NODE_REMOVE,
                 function(e) {
                     var node = e.target;
                     node.destroyUI(PROTO_SUPPORTED ? null : node.__proto__.constructor);
@@ -1121,7 +1118,42 @@ module.exports = function (window) {
     */
     DOCUMENT.bindModel = function(model, selector, mergeCurrent, fineGrain) {
         console.log(NAME+'bindModel');
-        return DOCUMENT.documentElement.bindModel(model, selector, mergeCurrent, fineGrain);
+        var documentElement = DOCUMENT.documentElement,
+            listener, elements, observer;
+        if ((typeof selector === 'string') && (selector.length>0) && !BINDING_LIST[selector]) {
+            BINDING_LIST[selector] = true;
+            elements = documentElement.getAll(selector);
+            elements.forEach(function(element) {
+                itagCore.bindModel(element, (typeof fineGrain==='function') ? fineGrain(element, model) : model, mergeCurrent);
+            });
+            listener = Event.after('UI:'+NODE_INSERT, function(e) {
+                var element = e.target;
+                itagCore.bindModel(element, (typeof fineGrain==='function') ? fineGrain(element, model) : model, mergeCurrent);
+            }, function(e) {
+                return e.target.matches(selector);
+            });
+            return {
+                detach: function() {
+                    listener.detach();
+                    if (NATIVE_OBJECT_OBSERVE) {
+                        elements = documentElement.getAll(selector);
+                        elements.forEach(function(element) {
+                            observer = element.getData('_observer');
+                            observer && Object.unobserve(element.model, observer);
+                        });
+                    }
+                    delete BINDING_LIST[selector];
+                }
+            };
+        }
+        // else
+        return {
+            detach: function() {
+                if (typeof selector === 'string') {
+                    delete BINDING_LIST[selector];
+                }
+            }
+        };
     };
 
    /**
@@ -1129,13 +1161,14 @@ module.exports = function (window) {
     *
     * @method createElement
     * @param tag {String} tagname to be created
+    * @param [suppressItagRender] {Boolean} to suppress Itags from rendering
     * @return {HTMLElement}
     * @since 0.0.1
     */
-    DOCUMENT.createElement = function(tag) {
-        console.log(NAME+'createElement');
+    DOCUMENT.createElement = function(tag, suppressItagRender) {
+        console.log(NAME+'createElement '+tag);
         var ItagClass = window.ITAGS[tag.toLowerCase()];
-        if (ItagClass) {
+        if (!suppressItagRender && ItagClass) {
             return new ItagClass();
         }
         return this._createElement(tag);
@@ -1505,7 +1538,6 @@ module.exports = function (window) {
         *
         * @method bindModel
         * @param model {Object} the model to bind to the itag-element
-        * @param selector {String|HTMLElement} a css-selector or an HTMLElement where the data should be bound
         * @param [mergeCurrent=false] {Boolean} when set true, current properties on the iTag that aren't defined
         *                                       in the new model, get merged into the new model.
         * @param [fineGrain] {Function} A function that recieves `model` as argument and should return a
@@ -1513,51 +1545,23 @@ module.exports = function (window) {
         * @return {Object} handler with a `detach()`-method which can be used to detach the binder
         * @since 0.0.1
         */
-        ElementPrototype.bindModel = function(model, selector, mergeCurrent, fineGrain) {
+        ElementPrototype.bindModel = function(model, mergeCurrent, fineGrain) {
             var instance = this,
-                listener, elements, observer;
-            if ((typeof selector === 'string') && (selector.length>0) && !BINDING_LIST[selector]) {
-                BINDING_LIST[selector] = true;
-                elements = instance.getAll(selector);
-                elements.forEach(function(element) {
-                    itagCore.bindModel(element, (typeof fineGrain==='function') ? fineGrain(element, model) : model, mergeCurrent);
-                });
-                listener = Event.after(NODE_INSERT, function(e) {
-                    var element = e.target;
-                    itagCore.bindModel(element, (typeof fineGrain==='function') ? fineGrain(element, model) : model, mergeCurrent);
-                }, selector);
-                return {
-                    detach: function() {
-                        listener.detach();
-                        if (NATIVE_OBJECT_OBSERVE) {
-                            elements = instance.getAll(selector);
-                            elements.forEach(function(element) {
-                                observer = element.getData('_observer');
-                                observer && Object.unobserve(element.model, observer);
-                            });
-                        }
-                        delete BINDING_LIST[selector];
-                    }
-                };
-            }
-            else if (selector && selector._syncUI) {
-                itagCore.bindModel(selector, (typeof fineGrain==='function') ? fineGrain(selector, model) : model, mergeCurrent);
+                observer;
+            if (instance._syncUI) {
+                itagCore.bindModel(instance, (typeof fineGrain==='function') ? fineGrain(instance, model) : model, mergeCurrent);
                 return {
                     detach: function() {
                         if (NATIVE_OBJECT_OBSERVE) {
-                            observer = selector.getData('_observer');
-                            observer && Object.unobserve(selector.model, observer);
+                            observer = instance.getData('_observer');
+                            observer && Object.unobserve(instance.model, observer);
                         }
                     }
                 };
             }
-            // else
+            // else for compatabilaty, return a detachFn
             return {
-                detach: function() {
-                    if (typeof selector === 'string') {
-                        delete BINDING_LIST[selector];
-                    }
-                }
+                detach: function() {}
             };
         };
 
