@@ -24,6 +24,10 @@
         "itags.core"
     ],
     "main": "itags.core.js",
+    "directories": {
+        "css": "./css",
+        "lib": "./lib"
+    },
     "browserify": {
         "transform": ["cssify"]
     },
@@ -31,13 +35,7 @@
         "node": "*"
     },
     "dependencies": {
-        "js-ext": "itsa/js-ext",
-        "io": "itsa/io",
-        "utils": "itsa/utils",
-        "polyfill": "itsa/polyfill",
-        "event": "itsa/event",
-        "event-dom": "itsa/event-dom",
-        "vdom": "itsa/vdom"
+        "itsa": "itsa/itsa"
     },
     "devDependencies": {
         "chai": "^1.9.1",

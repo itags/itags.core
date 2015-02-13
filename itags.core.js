@@ -16,18 +16,19 @@
 
 "use strict";
 
-require('polyfill/polyfill-base.js');
 require('./css/itags.core.css');
 
 var NAME = '[itags.core]: ',
-    jsExt = require('js-ext/js-ext.js'), // want the full version: include it at the top, so that object.merge is available
-    createHashMap = require('js-ext/extra/hashmap.js').createMap,
-    asyncSilent = require('utils').asyncSilent,
-    laterSilent = require('utils').laterSilent,
+    ITSA = require('itsa'),
+    createHashMap = ITSA.createHashMap,
+    asyncSilent = ITSA.asyncSilent,
+    laterSilent = ITSA.laterSilent,
+    Event = ITSA.Event,
+    IO = ITSA.IO,
+    Classes = ITSA.Classes,
     CLASS_ITAG_RENDERED = 'itag-rendered',
     DEFAULT_CHAIN_INIT = true,
     DEFAULT_CHAIN_DESTROY = true,
-    Classes = jsExt.Classes,
     NODE = 'node',
     REMOVE = 'remove',
     INSERT = 'insert',
@@ -65,7 +66,11 @@ var NAME = '[itags.core]: ',
     }),
     NOOP = function() {};
 
+
 module.exports = function (window) {
+    // make ITSA available as global, so we can use it in all other itag-modules:
+    window.ITSA = ITSA;
+    require('./lib/timer-finalize.js')(window);
 
     var DOCUMENT = window.document,
         PROTOTYPE_CHAIN_CAN_BE_SET = arguments[1], // hidden feature, used by unit-test
@@ -74,14 +79,10 @@ module.exports = function (window) {
         allowedToRefreshItags = true,
         itagsThatNeedsEvent = {},
         BINDING_LIST = {},
-        itagCore, MUTATION_EVENTS, PROTECTED_MEMBERS, EXTRA_BASE_MEMBERS, Event, IO,
+        itagCore, MUTATION_EVENTS, PROTECTED_MEMBERS, EXTRA_BASE_MEMBERS,
         DEFAULT_DELAYED_FINALIZE_EVENTS, ATTRIBUTE_EVENTS, registerDelay, manageFocus,
         mergeFlat,  DELAYED_FINALIZE_EVENTS;
 
-    require('vdom')(window);
-    Event = require('event-dom')(window);
-    IO = require('io')(window);
-    require('event/extra/timer-finalize.js');
 
 /*jshint boss:true */
     if (itagCore=window._ItagCore) {
@@ -1167,11 +1168,18 @@ module.exports = function (window) {
     */
     DOCUMENT.createElement = function(tag, suppressItagRender) {
         console.log(NAME+'createElement '+tag);
-        var ItagClass = window.ITAGS[tag.toLowerCase()];
+        var ItagClass = window.ITAGS[tag.toLowerCase()],
+            pos;
         if (!suppressItagRender && ItagClass) {
             return new ItagClass();
         }
-        return this._createElement(tag);
+        // we could run into a situation where we have an itag that is a pseudoclass
+        // yet suppressItagRender is `true`. This would lead into tagnames like: I-BUTTON#reset
+        // because native createElement cannot create these, we need to strip as from the #
+        else if (ItagClass && ((pos=tag.indexOf('#'))!==-1)) {
+            tag = tag.substr(0, pos);
+        }
+        return DOCUMENT._createElement(tag);
     };
 
     /**
