@@ -599,7 +599,7 @@ module.exports = function (window) {
             console.log(NAME+'bindModel');
             var instance = this,
                 observer;
-            if (element.isItag() && (element.model!==model)) {
+            if (element.isItag() && (element.model!==model) && !element.inside('.ce-design-node')) {
                 element.removeAttr('bound-model');
                 Object.protectedProp(element.vnode, 'ce_boundModel', true);
                 if (NATIVE_OBJECT_OBSERVE) {
