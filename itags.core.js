@@ -577,8 +577,16 @@ module.exports = function (window) {
                         default:
                             validValue = false;
                     }
-                    validValue && domElement.defineWhenUndefined(key, attrValue);
                 }
+                else if (value.toLowerCase()==='boolean') {
+                    // undefined `boolean` attributes need to be stored as `false`
+                    validValue = true;
+                    attrValue = false;
+                }
+                else {
+                    validValue = false;
+                }
+                validValue && domElement.defineWhenUndefined(key, attrValue);
             });
         },
 
