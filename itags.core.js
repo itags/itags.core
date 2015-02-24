@@ -19,7 +19,7 @@
 require('./css/itags.core.css');
 
 var NAME = '[itags.core]: ',
-    ITSA = require('itsa'),
+    ITSA = require('itsa'), // has `Event/extra/objectobserve.js` and `Event/extra/timer-finalize.js`
     createHashMap = ITSA.createHashMap,
     asyncSilent = ITSA.asyncSilent,
     laterSilent = ITSA.laterSilent,
@@ -70,7 +70,6 @@ var NAME = '[itags.core]: ',
 module.exports = function (window) {
     // make ITSA available as global, so we can use it in all other itag-modules:
     window.ITSA = ITSA;
-    require('./lib/timer-finalize.js')(window);
 
     var DOCUMENT = window.document,
         PROTOTYPE_CHAIN_CAN_BE_SET = arguments[1], // hidden feature, used by unit-test
@@ -131,6 +130,7 @@ module.exports = function (window) {
                 if (!reInitialize && NATIVE_OBJECT_OBSERVE) {
                     observer = instance.getData('_observer');
                     observer && Object.unobserve(instance.model, observer);
+                    instance.removeData('_observer');
                 }
                 superDestroy = function(constructor) {
                     var classCarierBKP = instance.__classCarier__;
@@ -599,8 +599,8 @@ module.exports = function (window) {
         * @method bindModel
         * @param element {HTMLElement} element, which should be an Itag
         * @param model {Object} the model to bind to the itag-element
-        * @param [mergeCurrent=false] {Boolean} when set true, current properties on the iTag that aren't defined
-        *                                       in the new model, get merged into the new model.
+        * @param [mergeCurrent=false] {Boolean} when set true, current properties on the iTag's model that aren't defined
+        *        in the new model, get merged into the new model.
         * @since 0.0.1
         */
         bindModel: function(element, model, mergeCurrent) {
@@ -733,7 +733,7 @@ module.exports = function (window) {
                 model = domElement.model,
                 newAttrs = [];
             attrs.each(function(value, key) {
-                newAttrs[newAttrs.length] = {name: key, value: model[key]};
+                model[key] && (newAttrs[newAttrs.length] = {name: key, value: model[key]});
             });
             (newAttrs.length>0) && domElement.setAttrs(newAttrs, true);
         },

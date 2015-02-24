@@ -25,8 +25,7 @@
     ],
     "main": "itags.core.js",
     "directories": {
-        "css": "./css",
-        "lib": "./lib"
+        "css": "./css"
     },
     "browserify": {
         "transform": ["cssify"]
