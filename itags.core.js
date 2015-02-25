@@ -53,6 +53,7 @@ var NAME = '[itags.core]: ',
     */
     ITAG_METHODS = createHashMap({
         init: '_initUI',
+        render: '_renderUI',
         sync: '_syncUI',
         destroy: '_destroyUI',
         attrs: '_attrs'
@@ -60,6 +61,7 @@ var NAME = '[itags.core]: ',
     // ITAG_METHOD_VALUES must match previous ITAG_METHODS's values!
     ITAG_METHOD_VALUES = createHashMap({
         _initUI: true,
+        _renderUI: true,
         _syncUI: true,
         _destroyUI: true,
         _attrs: true
@@ -158,7 +160,7 @@ module.exports = function (window) {
         *
         * @method initUI
         * @param constructor {Class} the Class which belongs with the itag
-        * @param [reInitialize=false] {Boolean} whether the destruction comes from a `re-initialize`-call. For internal usage.
+        * @param [reInitialize=false] {Boolean} whether the initialization comes from a `re-initialize`-call. For internal usage.
         * @chainable
         * @since 0.0.1
         */
@@ -196,6 +198,23 @@ module.exports = function (window) {
                     }
                 }
                 superInit(constructor || instance.constructor);
+            }
+            return instance;
+        },
+
+       /**
+        * Does the one-time initial rendering: is succeeded with syncUI
+        *
+        * @method renderUI
+        * @param [reInitialize=false] {Boolean} whether the renderUI comes from a `re-initialize`-call. For internal usage.
+        * @chainable
+        * @since 0.0.1
+        */
+        renderUI: function(reInitialize) {
+            var instance = this,
+                vnode = instance.vnode;
+            if ((reInitialize || !vnode.ce_initialized) && !vnode.removedFromDOM && !vnode.ce_destroyed) {
+                instance._renderUI();
                 Object.protectedProp(vnode, 'ce_initialized', true);
             }
             return instance;
@@ -262,6 +281,7 @@ module.exports = function (window) {
             if (vnode.ce_initialized && !vnode.removedFromDOM && !vnode.ce_destroyed) {
                 instance.destroyUI(constructor, true)
                         .initUI(constructor, true)
+                        .renderUI(true)
                         .syncUI();
             }
             return instance;
@@ -356,11 +376,23 @@ module.exports = function (window) {
         *
         * Syncs the new vnode's childNodes with the dom.
         *
-        * @method NOOP
+        * @method _initUI
         * @private
         * @since 0.0.1
         */
         _initUI: NOOP,
+
+       /**
+        * Transformed from `render` --> when the instance gets created, the instance will invoke `_renderUI` through the whole chain.
+        * Defaults to `NOOP`, so that it can be always be invoked.
+        *
+        * Syncs the new vnode's childNodes with the dom.
+        *
+        * @method _renderUI
+        * @private
+        * @since 0.0.1
+        */
+        _renderUI: NOOP,
 
        /**
         * Transformed from `sync` --> when `sync` gets invoked, the instance will invoke `_syncUI`.
@@ -626,7 +658,8 @@ module.exports = function (window) {
                 }
                 if (!element.vnode.ce_initialized) {
                     instance.attrsToModel(element);
-                    element.initUI(PROTO_SUPPORTED ? null : element.__proto__.constructor);
+                    element.initUI(PROTO_SUPPORTED ? null : element.__proto__.constructor)
+                           .renderUI();
                 }
                 element.syncUI();
                 element.itagRendered || instance.setRendered(element);
@@ -1066,8 +1099,9 @@ module.exports = function (window) {
                 });
                 if (!needsToBind) {
                     instance.attrsToModel(domElement);
-                    domElement.initUI(PROTO_SUPPORTED ? null : domElementConstructor);
-                    domElement.syncUI();
+                    domElement.initUI(PROTO_SUPPORTED ? null : domElementConstructor)
+                              .renderUI()
+                              .syncUI();
                     instance.setRendered(domElement);
                 }
                 if (NATIVE_OBJECT_OBSERVE) {
