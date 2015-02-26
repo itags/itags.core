@@ -21,7 +21,7 @@
         });
 
         after(function() {
-            container.remove();;
+            container.remove();
         });
 
         it('getHTML', function () {
@@ -88,7 +88,7 @@
         });
 
         after(function() {
-            container.remove();;
+            container.remove();
         });
 
 

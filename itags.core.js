@@ -145,6 +145,7 @@ module.exports = function (window) {
                     classCarierBKP = instance.__classCarier__;
                 };
                 superDestroy(constructor || instance.constructor);
+                itagCore.destroyPlugins(instance);
                 instance.detachAll();
                 // DO NOT set model to null --> it might be refered to asynchronously
                 // We don't need to bother: the node gets out of the dom and will really be destroyed after
@@ -215,6 +216,7 @@ module.exports = function (window) {
                 vnode = instance.vnode;
             if ((reInitialize || !vnode.ce_initialized) && !vnode.removedFromDOM && !vnode.ce_destroyed) {
                 instance._renderUI();
+                itagCore.initPlugins(instance);
                 Object.protectedProp(vnode, 'ce_initialized', true);
             }
             return instance;
@@ -347,6 +349,17 @@ module.exports = function (window) {
 
         contentHidden: true,
 
+       /**
+        * Invoked after a model is bound. Can be used for further action.
+        * Not always need to: after this method, `sync` will get invoked.
+        *
+        * @method _afterBindModel
+        * @private
+        * @chainable
+        * @since 0.0.1
+        */
+        _afterBindModel: NOOP,
+
         /**
          * Internal hash containing the `attrs`-definition which can be set by the itag-declaration.
          * This hash is used to determine which properties of `model` need to sync as an attribute.
@@ -448,7 +461,7 @@ module.exports = function (window) {
     */
     PROTECTED_MEMBERS = createHashMap();
     EXTRA_BASE_MEMBERS.each(function(value, key) {
-        ITAG_METHOD_VALUES[key] || (PROTECTED_MEMBERS[key] = true);
+        ITAG_METHOD_VALUES[key] || (key==='_afterBindModel') || (PROTECTED_MEMBERS[key] = true);
     });
 
     /**
@@ -574,6 +587,58 @@ module.exports = function (window) {
     };
 
     itagCore = {
+
+        initPlugins: function(domElement) {
+            var processVChildNodes = function(vnode) {
+                var vChildren = vnode.vChildren,
+                    len = vChildren.length,
+                    i, vChild, attrs, Plugin, ns, j, len2, keys, attribute;
+                for (i=0; i<len; i++) {
+                    vChild = vChildren[i];
+/*jshint boss:true */
+                    if (attrs=vChild.attrs) {
+/*jshint boss:false */
+                        keys = attrs.keys();
+                        len2 = keys.length;
+                        for (j=0; j<len2; j++) {
+                            attribute = keys[j];
+                            if ((attribute.substr(0, 7)==='plugin-') && (attrs[attribute]==='true')) {
+                                ns = attribute.substr(7);
+                                Plugin = window._ITSAPlugins[ns];
+                                Plugin && vChild.domNode.plug(Plugin);
+                            }
+                        }
+                    }
+                    processVChildNodes(vChild);
+                }
+            };
+            processVChildNodes(domElement.vnode);
+        },
+
+        destroyPlugins: function(domElement) {
+            var processVChildNodes = function(vnode) {
+                var vChildren = vnode.vChildren,
+                    len = vChildren.length,
+                    i, vChild, j, len2, ns, keys, plugin, Plugin;
+                for (i=0; i<len; i++) {
+                    vChild = vChildren[i];
+/*jshint boss:true */
+                    if (plugin=vChild.domNode.plugin) {
+/*jshint boss:false */
+                        keys = plugin.keys();
+                        len2 = keys.length;
+                        for (j=0; j<len2; j++) {
+                            ns = keys[j];
+                            Plugin = window._ITSAPlugins[ns];
+                            Plugin && vChild.domNode.unplug(Plugin);
+                        }
+                    }
+                    processVChildNodes(vChild);
+                }
+            };
+            processVChildNodes(domElement.vnode);
+        },
+
        /**
         * Copies the attibute-values into element.model.
         * Only processes the attributes that are defined through the Itag-class its `attrs`-property.
@@ -661,6 +726,7 @@ module.exports = function (window) {
                     element.initUI(PROTO_SUPPORTED ? null : element.__proto__.constructor)
                            .renderUI();
                 }
+                element._afterBindModel();
                 element.syncUI();
                 element.itagRendered || instance.setRendered(element);
             }
