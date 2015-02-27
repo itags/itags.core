@@ -222,7 +222,7 @@ module.exports = function (window) {
             return instance;
         },
 
-        getDesignNode: function() {
+        getItagContainer: function() {
             return this.vnode.ce_designNode;
         },
 
