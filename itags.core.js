@@ -24,7 +24,6 @@ var NAME = '[itags.core]: ',
     asyncSilent = ITSA.asyncSilent,
     laterSilent = ITSA.laterSilent,
     Event = ITSA.Event,
-    IO = ITSA.IO,
     Classes = ITSA.Classes,
     CLASS_ITAG_RENDERED = 'itag-rendered',
     DEFAULT_CHAIN_INIT = true,
@@ -1032,11 +1031,6 @@ module.exports = function (window) {
                             }
                         }
                     }
-                });
-
-                IO.finalize(function() {
-                    console.info('IO-finalizer will refresh itags');
-                    allowedToRefreshItags && DOCUMENT.refreshItags();
                 });
             }
 
