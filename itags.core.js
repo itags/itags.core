@@ -591,7 +591,7 @@ module.exports = function (window) {
             var processVChildNodes = function(vnode) {
                 var vChildren = vnode.vChildren,
                     len = vChildren.length,
-                    i, vChild, attrs, Plugin, ns, j, len2, keys, attribute;
+                    i, vChild, attrs, ns, j, len2, keys, attribute;
                 for (i=0; i<len; i++) {
                     vChild = vChildren[i];
 /*jshint boss:true */
@@ -603,8 +603,7 @@ module.exports = function (window) {
                             attribute = keys[j];
                             if ((attribute.substr(0, 7)==='plugin-') && (attrs[attribute]==='true')) {
                                 ns = attribute.substr(7);
-                                Plugin = window._ITSAPlugins[ns];
-                                Plugin && vChild.domNode.plug(Plugin);
+                                vChild.domNode.plug(ns);
                             }
                         }
                     }
@@ -618,7 +617,7 @@ module.exports = function (window) {
             var processVChildNodes = function(vnode) {
                 var vChildren = vnode.vChildren,
                     len = vChildren.length,
-                    i, vChild, j, len2, ns, keys, plugin, Plugin;
+                    i, vChild, j, len2, ns, keys, plugin;
                 for (i=0; i<len; i++) {
                     vChild = vChildren[i];
 /*jshint boss:true */
@@ -628,8 +627,7 @@ module.exports = function (window) {
                         len2 = keys.length;
                         for (j=0; j<len2; j++) {
                             ns = keys[j];
-                            Plugin = window._ITSAPlugins[ns];
-                            Plugin && vChild.domNode.unplug(Plugin);
+                            vChild.domNode.unplug(ns);
                         }
                     }
                     processVChildNodes(vChild);
