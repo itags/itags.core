@@ -6,7 +6,7 @@
 
     var expect = require('chai').expect,
         DOCUMENT = window.document,
-        async = require('utils').asyncSilent,
+        async = require('utils').async,
         itagCore = require("../itags.core")(window, true);
 
 

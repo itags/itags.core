@@ -19,10 +19,9 @@
 require('./css/itags.core.css');
 
 var NAME = '[itags.core]: ',
-    ITSA = require('itsa'), // has `Event/extra/objectobserve.js` and `Event/extra/timer-finalize.js`
+    ITSA = require('itsa'),
     createHashMap = ITSA.createHashMap,
-    asyncSilent = ITSA.asyncSilent,
-    laterSilent = ITSA.laterSilent,
+    async = ITSA.async,
     Event = ITSA.Event,
     Classes = ITSA.Classes,
     CLASS_ITAG_RENDERED = 'itag-rendered',
@@ -39,8 +38,6 @@ var NAME = '[itags.core]: ',
     ATTRIBUTE_REMOVE = ATTRIBUTE+REMOVE,
     ATTRIBUTE_CHANGE = ATTRIBUTE+CHANGE,
     ATTRIBUTE_INSERT = ATTRIBUTE+INSERT,
-    DELAYED_EVT_TIME = 500,
-    NATIVE_OBJECT_OBSERVE = !!Object.observe,
     /**
      * Internal hash containing the names of members which names should be transformed
      *
@@ -67,7 +64,6 @@ var NAME = '[itags.core]: ',
     }),
     NOOP = function() {};
 
-
 module.exports = function (window) {
     // make ITSA available as global, so we can use it in all other itag-modules:
     window.ITSA = ITSA;
@@ -76,12 +72,9 @@ module.exports = function (window) {
         PROTOTYPE_CHAIN_CAN_BE_SET = arguments[1], // hidden feature, used by unit-test
         RUNNING_ON_NODE = (typeof global !== 'undefined') && (global.window!==window),
         PROTO_SUPPORTED = !!Object.__proto__,
-        allowedToRefreshItags = true,
-        itagsThatNeedsEvent = {},
         BINDING_LIST = {},
-        itagCore, MUTATION_EVENTS, PROTECTED_MEMBERS, EXTRA_BASE_MEMBERS,
-        DEFAULT_DELAYED_FINALIZE_EVENTS, ATTRIBUTE_EVENTS, registerDelay, manageFocus,
-        mergeFlat,  DELAYED_FINALIZE_EVENTS;
+        itagCore, PROTECTED_MEMBERS, EXTRA_BASE_MEMBERS,
+        ATTRIBUTE_EVENTS, manageFocus, mergeFlat;
 
 
 /*jshint boss:true */
@@ -128,9 +121,9 @@ module.exports = function (window) {
                 vnode = instance.vnode,
                 superDestroy, observer;
             if (vnode.ce_initialized && (reInitialize || vnode.removedFromDOM) && !vnode.ce_destroyed) {
-                if (!reInitialize && NATIVE_OBJECT_OBSERVE) {
+                if (!reInitialize) {
                     observer = instance.getData('_observer');
-                    observer && Object.unobserve(instance.model, observer);
+                    instance.model.unobserve(observer);
                     instance.removeData('_observer');
                 }
                 superDestroy = function(constructor) {
@@ -432,17 +425,6 @@ module.exports = function (window) {
     ATTRIBUTE_EVENTS = [ATTRIBUTE_REMOVE, ATTRIBUTE_CHANGE, ATTRIBUTE_INSERT];
 
     /**
-     * Internal hash holding all mutation events
-     *
-     * @property MUTATION_EVENTS
-     * @default ['noderemove', 'nodeinsert', 'nodecontentchange', 'attributeremove', 'attributechange', 'attributeinsert']
-     * @type Array
-     * @protected
-     * @since 0.0.1
-    */
-    MUTATION_EVENTS = [NODE_REMOVE, NODE_INSERT, NODE_CONTENT_CHANGE, ATTRIBUTE_REMOVE, ATTRIBUTE_CHANGE, ATTRIBUTE_INSERT];
-
-    /**
      * Internal hash containing all `protected members` --> the properties that CANNOT be set at the prototype of ItagClasses.
      *
      * @property PROTECTED_MEMBERS
@@ -462,90 +444,6 @@ module.exports = function (window) {
     EXTRA_BASE_MEMBERS.each(function(value, key) {
         ITAG_METHOD_VALUES[key] || (key==='_afterBindModel') || (PROTECTED_MEMBERS[key] = true);
     });
-
-    /**
-     * Default internal hash containing all DOM-events that will not directly call `event-finalize`
-     * but after a delay of 1 second
-     *
-     * @property DEFAULT_DELAYED_FINALIZE_EVENTS
-     * @default {
-     *    mousedown: true,
-     *    mouseup: true,
-     *    mousemove: true,
-     *    panmove: true,
-     *    panstart: true,
-     *    panleft: true,
-     *    panright: true,
-     *    panup: true,
-     *    pandown: true,
-     *    pinchmove: true,
-     *    rotatemove: true,
-     *    focus: true,
-     *    manualfocus: true,
-     *    keydown: true,
-     *    keyup: true,
-     *    keypress: true,
-     *    blur: true,
-     *    resize: true,
-     *    scroll: true
-     * }
-     * @type Object
-     * @private
-     * @since 0.0.1
-    */
-    DEFAULT_DELAYED_FINALIZE_EVENTS = {
-        mousedown: true,
-        mouseup: true,
-        mousemove: true,
-        panmove: true,
-        panstart: true,
-        panleft: true,
-        panright: true,
-        panup: true,
-        pandown: true,
-        pinchmove: true,
-        rotatemove: true,
-        focus: true,
-        manualfocus: true,
-        keydown: true,
-        keyup: true,
-        keypress: true,
-        blur: true,
-        resize: true,
-        scroll: true
-    };
-
-    /**
-     * Internal hash containing all DOM-events that will not directly call `event-finalize`
-     * but after a delay of 1 second
-     *
-     * @property DELAYED_FINALIZE_EVENTS
-     * @default {
-     *    mousedown: true,
-     *    mouseup: true,
-     *    mousemove: true,
-     *    panmove: true,
-     *    panstart: true,
-     *    panleft: true,
-     *    panright: true,
-     *    panup: true,
-     *    pandown: true,
-     *    pinchmove: true,
-     *    rotatemove: true,
-     *    focus: true,
-     *    manualfocus: true,
-     *    keydown: true,
-     *    keyup: true,
-     *    keypress: true,
-     *    blur: true,
-     *    resize: true,
-     *    scroll: true
-     * }
-     * @type Object
-     * @private
-     * @since 0.0.1
-    */
-    DELAYED_FINALIZE_EVENTS = DEFAULT_DELAYED_FINALIZE_EVENTS.shallowClone();
 
    /**
     * Merges all prototype-members of every level in the chain directly on the domElement.
@@ -704,20 +602,16 @@ module.exports = function (window) {
             if (element.isItag() && (element.model!==model) && !element.inside('.ce-design-node')) {
                 element.removeAttr('bound-model');
                 Object.protectedProp(element.vnode, 'ce_boundModel', true);
-                if (NATIVE_OBJECT_OBSERVE) {
-                    observer = element.getData('_observer');
-                    observer && Object.unobserve(element.model, observer);
-                }
+                observer = element.getData('_observer');
+                element.model.unobserve(observer);
                 mergeCurrent && (model.merge(element.model, {full: true}));
                 element.model = model;
-                if (NATIVE_OBJECT_OBSERVE) {
-                    observer = function() {
-                        itagCore.modelToAttrs(element);
-                        element.syncUI();
-                    };
-                    Object.observe(element.model, observer);
-                    element.setData('_observer', observer);
-                }
+                observer = function() {
+                    itagCore.modelToAttrs(element);
+                    element.syncUI();
+                };
+                element.model.observe(observer);
+                element.setData('_observer', observer);
                 if (!element.vnode.ce_initialized) {
                     instance.attrsToModel(element);
                     element.initUI(PROTO_SUPPORTED ? null : element.__proto__.constructor)
@@ -855,80 +749,6 @@ module.exports = function (window) {
         },
 
        /**
-        * Defines which domevents should lead to a direct sync by the Event-finalizer.
-        * Only needed for events that are in the list set by DEFAULT_DELAYED_FINALIZE_EVENTS:
-        *
-        * <ul>
-        *     <li>mousedown</li>
-        *     <li>mouseup</li>
-        *     <li>mousemove</li>
-        *     <li>panmove</li>
-        *     <li>panstart</li>
-        *     <li>panleft</li>
-        *     <li>panright</li>
-        *     <li>panup</li>
-        *     <li>pandown</li>
-        *     <li>pinchmove</li>
-        *     <li>rotatemove</li>
-        *     <li>focus</li>
-        *     <li>manualfocus</li>
-        *     <li>keydown</li>
-        *     <li>keyup</li>
-        *     <li>keypress</li>
-        *     <li>blur</li>
-        *     <li>resize</li>
-        *     <li>scroll</li>
-        * </ul>
-        *
-        * Events that are not in this list don't need to be set: they always go through the finalizer immediatly.
-        *
-        * You need to set this if the itag-definition its `sync`-method should be updated after one of the events in the list.
-        *
-        * @method setItagDirectEventResponse
-        * @param ItagClass {Class} The ItagClass that wants to register
-        * @param domEvents {Array|String} the domevents that should directly make the itag sync
-        * @since 0.0.1
-        */
-        setDirectEventResponse :function(ItagClass, domEvents) {
-            console.log(NAME+'setDirectEventResponse');
-            var itag = ItagClass.$$itag;
-            if (!NATIVE_OBJECT_OBSERVE && itag) {
-                Array.isArray(domEvents) || (domEvents=[domEvents]);
-                domEvents.forEach(function(domEvent) {
-                    domEvent.endsWith('outside') && (domEvent=domEvent.substr(0, domEvent.length-7));
-                    domEvent = domEvent.toLowerCase();
-                    if (domEvent==='blur') {
-                        console.warn('the event "blur" cannot be delayed, for it would lead to extremely many syncing before anything changes which you don\'t need (fe when i-tabpane switches panes)');
-                    }
-                    else {
-                        if (DEFAULT_DELAYED_FINALIZE_EVENTS[domEvent]) {
-                            itagsThatNeedsEvent[domEvent] || (itagsThatNeedsEvent[domEvent]=[]);
-                            itagsThatNeedsEvent[domEvent].push(itag);
-                            // remove from list in case at least one itag is in the dom:
-                            if (DOCUMENT.getElement(itag, true)) {
-                                delete DELAYED_FINALIZE_EVENTS[domEvent];
-                            }
-                            // add to the list whenever elements are removed and no itag is in the dom anymore:
-                            Event.after('UI:'+NODE_REMOVE, function() {
-                                var elementThatNeedsEvent;
-                                itagsThatNeedsEvent[domEvent].some(function(oneItag) {
-                                    DOCUMENT.getElement(oneItag, true) && (elementThatNeedsEvent=true);
-                                    return elementThatNeedsEvent;
-                                });
-                                elementThatNeedsEvent || (DELAYED_FINALIZE_EVENTS[domEvent]=true);
-                            }, itag);
-
-                            // remove from the list whenever itag is added in the dom:
-                            Event.after('UI:'+NODE_INSERT, function() {
-                                delete DELAYED_FINALIZE_EVENTS[domEvent];
-                            }, itag);
-                        }
-                    }
-                });
-            }
-        },
-
-       /**
         * Defines the itag-element as being rendered.
         *
         * @method setRendered
@@ -978,7 +798,6 @@ module.exports = function (window) {
         */
         setupWatchers: function() {
             console.log(NAME+'setupWatchers');
-            var types = [];
 
             Event.after(
                 'UI:'+NODE_REMOVE,
@@ -1007,29 +826,6 @@ module.exports = function (window) {
                     return e.target.vnode.isItag;
                 }
             );
-
-            if (!NATIVE_OBJECT_OBSERVE) {
-                Event.finalize(function(e) {
-                    var type = e.type;
-                    if (allowedToRefreshItags && !e._noRender && (!e.status || !e.status.renderPrevented)) {
-                        e.rendered = true;
-                        if (!MUTATION_EVENTS[type] && !type.endsWith('outside')) {
-                            if (DELAYED_FINALIZE_EVENTS[type]) {
-                                types.push(type);
-                                registerDelay || (registerDelay = laterSilent(function() {
-                                    console.info('Event-finalizer will delayed-refresh itags because of events: '+JSON.stringify(types));
-                                    DOCUMENT.refreshItags();
-                                    types.length = 0;
-                                    registerDelay = null;
-                                }, DELAYED_EVT_TIME));
-                            }
-                            else {
-                                DOCUMENT.refreshItags();
-                            }
-                        }
-                    }
-                });
-            }
 
             if (PROTO_SUPPORTED) {
                 Event.after(
@@ -1146,7 +942,7 @@ module.exports = function (window) {
             }
             // sync, but do this after the element is created:
             // in the next eventcycle:
-            asyncSilent(function(){
+            async(function(){
                 var needsToBind = (domElement.getAttr('bound-model')==='true');
                 // only if no modelbinding is needed, we can directly init, sync and make ready,
                 // otherwise we need to make this done by  `bindModel`
@@ -1161,14 +957,12 @@ module.exports = function (window) {
                               .syncUI();
                     instance.setRendered(domElement);
                 }
-                if (NATIVE_OBJECT_OBSERVE) {
-                    observer = function() {
-                        instance.modelToAttrs(domElement);
-                        domElement.syncUI();
-                    };
-                    Object.observe(domElement.model, observer);
-                    domElement.setData('_observer', observer);
-                }
+                observer = function() {
+                    instance.modelToAttrs(domElement);
+                    domElement.syncUI();
+                };
+                domElement.model.observe(observer);
+                domElement.setData('_observer', observer);
             });
         }
     };
@@ -1185,7 +979,7 @@ module.exports = function (window) {
     manageFocus = function(domElement) {
         console.log(NAME+'manageFocus');
         var focusManagerNode = domElement.getElement('.focussed[fm-manage]');
-        focusManagerNode && focusManagerNode.focus(true);
+        focusManagerNode && focusManagerNode.focus();
     };
 
    /**
@@ -1235,13 +1029,11 @@ module.exports = function (window) {
             return {
                 detach: function() {
                     listener.detach();
-                    if (NATIVE_OBJECT_OBSERVE) {
-                        elements = documentElement.getAll(selector);
-                        elements.forEach(function(element) {
-                            observer = element.getData('_observer');
-                            observer && Object.unobserve(element.model, observer);
-                        });
-                    }
+                    elements = documentElement.getAll(selector);
+                    elements.forEach(function(element) {
+                        observer = element.getData('_observer');
+                        element.model.unobserve(observer);
+                    });
                     delete BINDING_LIST[selector];
                 }
             };
@@ -1296,51 +1088,6 @@ module.exports = function (window) {
     Object.protectedProp(DOCUMENT, 'createItag', function(itagName, prototypes, subClassable) {
         return Classes.ItagBaseClass.subClass.call(Classes.ItagBaseClass, itagName, prototypes, null, null, subClassable);
     });
-
-   /**
-    * Refreshes all Itag-elements in the dom by syncing their element.model onto the attributes and calling their `sync`-method.
-    *
-    * @method refreshItags
-    * @chainable
-    * @since 0.0.1
-    */
-    DOCUMENT.refreshItags = function(force) {
-        var instance = this,
-            list, len, i, itagElement, needRefresh, stringifiedModel;
-        if (!NATIVE_OBJECT_OBSERVE || force) {
-            list = instance.getItags();
-            len = list.length;
-            allowedToRefreshItags = false; // prevent setTimeout to fall into loop
-            for (i=0; i<len; i++) {
-                itagElement = list[i];
-                // because itagElement could be removed intermediate, we need to check if it's there
-                if (itagElement && itagElement.isRendered && itagElement.isRendered()) {
-                    needRefresh = false;
-                    try {
-                        stringifiedModel = JSON.stringify(itagElement.model);
-                        if (stringifiedModel!==itagElement.getData('_bkpModel')) {
-                            needRefresh = true;
-                            itagElement.setData('_bkpModel', stringifiedModel);
-                        }
-                    }
-                    catch (err) {
-                        console.warn('Invalid model-structure: possibly it is cycle referenced --> will NEVER refresh the Itag:');
-                        console.warn(itagElement);
-                        console.warn('related model:');
-                        console.warn(itagElement.model);
-                    }
-                    if (needRefresh) {
-                        itagCore.modelToAttrs(itagElement);
-                        itagElement.syncUI();
-                        itagElement.hasClass('focussed') && manageFocus(itagElement);
-                    }
-                }
-            }
-            allowedToRefreshItags = true;
-        }
-        return instance;
-    };
-
 
     //===============================================================================
     //== patching native prototypes =================================================
@@ -1603,15 +1350,9 @@ module.exports = function (window) {
                 domElementConstructor.mergePrototypes(Event.Emitter(itagEmitterName), true, true);
                 prototypes && domElementConstructor.mergePrototypes(prototypes, true, true);
                 // make emitting change-events unpreventable and unrenderable:
-                Event.defineEvent(itagEmitterName+':change')
-                     .unPreventable()
-                     .noRender();
-                Event.defineEvent(itagEmitterName+':prototypechange')
-                     .unPreventable()
-                     .noRender();
-                Event.defineEvent(itagEmitterName+':prototyperemove')
-                     .unPreventable()
-                     .noRender();
+                Event.defineEvent(itagEmitterName+':change').unPreventable();
+                Event.defineEvent(itagEmitterName+':prototypechange').unPreventable();
+                Event.defineEvent(itagEmitterName+':prototyperemove').unPreventable();
 
                 window.ITAGS[registerName] = domElementConstructor;
 
@@ -1657,10 +1398,8 @@ module.exports = function (window) {
                 itagCore.bindModel(instance, (typeof fineGrain==='function') ? fineGrain(instance, model) : model, mergeCurrent);
                 return {
                     detach: function() {
-                        if (NATIVE_OBJECT_OBSERVE) {
-                            observer = instance.getData('_observer');
-                            observer && Object.unobserve(instance.model, observer);
-                        }
+                        observer = instance.getData('_observer');
+                        instance.model.unobserve(observer);
                     }
                 };
             }
