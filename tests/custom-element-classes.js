@@ -11,7 +11,7 @@
 
 
     describe('With __proto__', function() {
-        var IShape = DOCUMENT.createItag('i-shape', {
+        var IShape = DOCUMENT.defineItag('i-shape', {
                 init: function () {
                     // should only be set the firts time
                     // otherwise there is a bug: init shouldn't run twice
@@ -201,7 +201,7 @@
         });
 
         describe('With no constructor:', function () {
-            var P = DOCUMENT.createItag('i-p', {
+            var P = DOCUMENT.defineItag('i-p', {
                     twice: function (v) {
                         return 2 * v;
                     }
@@ -226,7 +226,7 @@
         });
 
             describe('Multiple levels', function () {
-                var A = DOCUMENT.createItag('i-a', {
+                var A = DOCUMENT.defineItag('i-a', {
                         init: function () {
                             this.a = 3;
                         },
@@ -319,7 +319,7 @@
 
             });
         describe('Three levels with no constructor:', function () {
-            var P = DOCUMENT.createItag('i-p2', {
+            var P = DOCUMENT.defineItag('i-p2', {
                     twice: function (v) {
                         return 2 * v;
                     }
@@ -345,7 +345,7 @@
 
         describe('Check prototype properties', function () {
             it('properties', function () {
-                var A = DOCUMENT.createItag('i-a2', {a: 3});
+                var A = DOCUMENT.defineItag('i-a2', {a: 3});
                 var a = new A();
                 expect(a.a).be.equal(3);
             });
@@ -354,7 +354,7 @@
         describe('Overriding Object-members', function () {
 
             it('size() should be defined during initialisation', function () {
-                var A = DOCUMENT.createItag('i-a3', {
+                var A = DOCUMENT.defineItag('i-a3', {
                     size: function() {
                         return 100;
                     }
@@ -364,7 +364,7 @@
             });
 
             it('size() should be defined through mergePrototypes', function () {
-                var A = DOCUMENT.createItag('i-a4').mergePrototypes({
+                var A = DOCUMENT.defineItag('i-a4').mergePrototypes({
                     size: function() {
                         return 100;
                     }
@@ -373,7 +373,7 @@
                 expect(a.size()).be.equal(100);
             });
             it('size() should  be defined through redifinition mergePrototypes', function () {
-                var A = DOCUMENT.createItag('i-a5', {
+                var A = DOCUMENT.defineItag('i-a5', {
                     size: function() {
                         return 10;
                     }
@@ -391,21 +391,21 @@
         describe('mergePrototypes', function () {
             var obj = {a:1, b:2, c:3};
             it('new empty class', function () {
-                var ClassA = DOCUMENT.createItag('i-a6'),
+                var ClassA = DOCUMENT.defineItag('i-a6'),
                     a = new ClassA();
                 ClassA.mergePrototypes(obj);
                 expect(a.b).be.eql(2);
                 expect(a.hasOwnProperty('b')).be.false;
             });
             it('existing class',  function () {
-                var ClassA = DOCUMENT.createItag('i-a7', {b: 42}),
+                var ClassA = DOCUMENT.defineItag('i-a7', {b: 42}),
                     a = new ClassA();
                 // ClassA.mergePrototypes(obj);
                 expect(a.b).be.eql(42);
                 expect(a.hasOwnProperty('b')).be.false;
             });
             it ('existing class, overwriting', function () {
-                var ClassA = DOCUMENT.createItag('i-a8', {
+                var ClassA = DOCUMENT.defineItag('i-a8', {
                     b: 'a',
                     whatever: function (v) {
                         expect(1, 'should never reach this one').eql(0);
@@ -429,7 +429,7 @@
         describe('$orig', function () {
 
             it('existing class, override',  function () {
-                var ClassA = DOCUMENT.createItag('i-a9', {
+                var ClassA = DOCUMENT.defineItag('i-a9', {
                     b: 'a',
                     whatever: function (v) {
                         expect(this.b).eql('a');
@@ -448,7 +448,7 @@
                 expect(a.whatever('e')).eql('aecd');
             });
             it('Two level inheritance each with plugin', function () {
-                var ClassA = DOCUMENT.createItag('i-a10', {
+                var ClassA = DOCUMENT.defineItag('i-a10', {
                     whatever: function (a) {
                         return a + 'a';
                     }
@@ -473,7 +473,7 @@
                 expect(a.whatever('1')).eql('1ab');
             });
             it('Two level inheritance each with two plugins each', function () {
-                var ClassA = DOCUMENT.createItag('i-a11', {
+                var ClassA = DOCUMENT.defineItag('i-a11', {
                     whatever: function (a) {
                         return a + 'a';
                     }
@@ -506,7 +506,7 @@
                 expect(a.whatever('1')).eql('1abB');
             });
             it('Three level inheritance each with plugin', function () {
-                var ClassA = DOCUMENT.createItag('i-a12', {
+                var ClassA = DOCUMENT.defineItag('i-a12', {
                     whatever: function (a) {
                         return a + 'a';
                     }
@@ -531,7 +531,7 @@
                 expect(a.whatever('1')).eql('1ab');
             });
             it('Three level inheritance each with two plugins each', function () {
-                var ClassA = DOCUMENT.createItag('i-a13', {
+                var ClassA = DOCUMENT.defineItag('i-a13', {
                     whatever: function (a) {
                         return a + 'a';
                     }
@@ -564,7 +564,7 @@
                 expect(a.whatever('1')).eql('1abB');
             });
             it('orig present even if no original', function (){
-                var ClassA = DOCUMENT.createItag('i-a14', {
+                var ClassA = DOCUMENT.defineItag('i-a14', {
                 }).mergePrototypes({
                     whatever: function (b) {
                         return this.$orig(b) + 'b';
@@ -574,7 +574,7 @@
                 expect(a.whatever('1')).eql('undefinedb');
             });
             it('orig present even if no original two levels deep', function (){
-                var ClassA = DOCUMENT.createItag('i-a15', {
+                var ClassA = DOCUMENT.defineItag('i-a15', {
                 }).mergePrototypes({
                     whatever: function (b) {
                         return this.$orig(b) + 'b';
@@ -589,7 +589,7 @@
             });
 
             it('orig present even if no original two levels deep, multiple methods', function (){
-                var ClassA = DOCUMENT.createItag('i-a16', {
+                var ClassA = DOCUMENT.defineItag('i-a16', {
                 }).mergePrototypes({
                     dummy1: function() {
                         return 'dummy1 returnvalue';
@@ -622,7 +622,7 @@
             });
 
             it('orig present even if no original three levels deep, multiple methods', function (){
-                var ClassA = DOCUMENT.createItag('i-a17').mergePrototypes({
+                var ClassA = DOCUMENT.defineItag('i-a17').mergePrototypes({
                     dummy1: function() {
                         return 'dummy1 returnvalue';
                     },
@@ -654,7 +654,7 @@
             });
 
             it('mergePrototypes with $orig without argument', function(done) {
-                var A = DOCUMENT.createItag('i-a18', {
+                var A = DOCUMENT.defineItag('i-a18', {
                         init: function() {
                             this.x = 'a';
                         },
@@ -677,7 +677,7 @@
             });
 
             it('mergePrototypes with $orig with argument', function(done) {
-                var A = DOCUMENT.createItag('i-a19', {
+                var A = DOCUMENT.defineItag('i-a19', {
                         init: function(x) {
                             this.x = 'a';
                         },
@@ -706,7 +706,7 @@
         describe('$orig on sync', function () {
 
             it('existing class, override',  function () {
-                var ClassA = DOCUMENT.createItag('i-za9', {
+                var ClassA = DOCUMENT.defineItag('i-za9', {
                     b: 'a',
                     sync: function (v) {
                         expect(this.b).eql('a');
@@ -724,7 +724,7 @@
                 expect(a._syncUI('e')).eql('aecd');
             });
             it('Two level inheritance each with plugin', function () {
-                var ClassA = DOCUMENT.createItag('i-za10', {
+                var ClassA = DOCUMENT.defineItag('i-za10', {
                     sync: function (a) {
                         return a + 'a';
                     }
@@ -749,7 +749,7 @@
                 expect(a._syncUI('1')).eql('1ab');
             });
             it('Two level inheritance each with two plugins each', function () {
-                var ClassA = DOCUMENT.createItag('i-za11', {
+                var ClassA = DOCUMENT.defineItag('i-za11', {
                     sync: function (a) {
                         return a + 'a';
                     }
@@ -782,7 +782,7 @@
                 expect(a._syncUI('1')).eql('1abB');
             });
             it('Three level inheritance each with plugin', function () {
-                var ClassA = DOCUMENT.createItag('i-za12', {
+                var ClassA = DOCUMENT.defineItag('i-za12', {
                     sync: function (a) {
                         return a + 'a';
                     }
@@ -807,7 +807,7 @@
                 expect(a._syncUI('1')).eql('1ab');
             });
             it('Three level inheritance each with two plugins each', function () {
-                var ClassA = DOCUMENT.createItag('i-za13', {
+                var ClassA = DOCUMENT.defineItag('i-za13', {
                     sync: function (a) {
                         return a + 'a';
                     }
@@ -840,7 +840,7 @@
                 expect(a._syncUI('1')).eql('1abB');
             });
             it('orig present even if no original', function (){
-                var ClassA = DOCUMENT.createItag('i-za14', {
+                var ClassA = DOCUMENT.defineItag('i-za14', {
                 }).mergePrototypes({
                     sync: function (b) {
                         return this.$orig(b) + 'b';
@@ -850,7 +850,7 @@
                 expect(a._syncUI('1')).eql('undefinedb');
             });
             it('orig present even if no original two levels deep', function (){
-                var ClassA = DOCUMENT.createItag('i-za15', {
+                var ClassA = DOCUMENT.defineItag('i-za15', {
                 }).mergePrototypes({
                     sync: function (b) {
                         return this.$orig(b) + 'b';
@@ -865,7 +865,7 @@
             });
 
             it('orig present even if no original two levels deep, multiple methods', function (){
-                var ClassA = DOCUMENT.createItag('i-za16', {
+                var ClassA = DOCUMENT.defineItag('i-za16', {
                 }).mergePrototypes({
                     dummy1: function() {
                         return 'dummy1 returnvalue';
@@ -898,7 +898,7 @@
             });
 
             it('orig present even if no original three levels deep, multiple methods', function (){
-                var ClassA = DOCUMENT.createItag('i-za17').mergePrototypes({
+                var ClassA = DOCUMENT.defineItag('i-za17').mergePrototypes({
                     dummy1: function() {
                         return 'dummy1 returnvalue';
                     },
@@ -930,7 +930,7 @@
             });
 
             it('mergePrototypes with $orig without argument', function(done) {
-                var A = DOCUMENT.createItag('i-za18', {
+                var A = DOCUMENT.defineItag('i-za18', {
                         init: function() {
                             this.x = 'a';
                         },
@@ -953,7 +953,7 @@
             });
 
             it('mergePrototypes with $orig with argument', function(done) {
-                var A = DOCUMENT.createItag('i-za19', {
+                var A = DOCUMENT.defineItag('i-za19', {
                         init: function(x) {
                             this.x = 'a';
                         },
@@ -981,7 +981,7 @@
         describe('Chained init', function () {
 
             it('chaining by default', function (done) {
-                var ClassA = DOCUMENT.createItag('i-a20', {
+                var ClassA = DOCUMENT.defineItag('i-a20', {
                         init: function() {
                             this.x = 1;
                         }
@@ -1007,7 +1007,7 @@
             });
 
             it('forced chaining level 3', function (done) {
-                var ClassA = DOCUMENT.createItag('i-a21', {
+                var ClassA = DOCUMENT.defineItag('i-a21', {
                         init: function() {
                             this.x = 1;
                         }
@@ -1033,7 +1033,7 @@
             });
 
             it('forced chaining level 2+3 ', function (done) {
-                var ClassA = DOCUMENT.createItag('i-a22', {
+                var ClassA = DOCUMENT.defineItag('i-a22', {
                         init: function() {
                             this.x = 1;
                         }
@@ -1059,7 +1059,7 @@
             });
 
             it('forced chaining 3 levels', function (done) {
-                var ClassA = DOCUMENT.createItag('i-a23', {
+                var ClassA = DOCUMENT.defineItag('i-a23', {
                         init: function() {
                             this.x = 1;
                         }
@@ -1085,7 +1085,7 @@
             });
 
             it('forced no chaining level 3', function (done) {
-                var ClassA = DOCUMENT.createItag('i-a24', {
+                var ClassA = DOCUMENT.defineItag('i-a24', {
                         init: function() {
                             this.x = 1;
                         }
@@ -1111,7 +1111,7 @@
             });
 
             it('forced no chaining level 2+3 ', function (done) {
-                var ClassA = DOCUMENT.createItag('i-a25', {
+                var ClassA = DOCUMENT.defineItag('i-a25', {
                         init: function() {
                             this.x = 1;
                         }
@@ -1137,7 +1137,7 @@
             });
 
             it('forced no chaining 3 levels', function (done) {
-                var ClassA = DOCUMENT.createItag('i-a26', {
+                var ClassA = DOCUMENT.defineItag('i-a26', {
                         init: function() {
                             this.x = 1;
                         }
@@ -1163,7 +1163,7 @@
             });
 
             it('forced no chaining level 2+3  redefined init', function (done) {
-                var ClassA = DOCUMENT.createItag('i-a27', {
+                var ClassA = DOCUMENT.defineItag('i-a27', {
                         init: function() {
                             this.x = 1;
                         }
@@ -1190,7 +1190,7 @@
             });
 
             it('forced no chaining 3 levels redefined init', function (done) {
-                var ClassA = DOCUMENT.createItag('i-a28', {
+                var ClassA = DOCUMENT.defineItag('i-a28', {
                         init: function() {
                             this.x = 1;
                         }
@@ -1222,7 +1222,7 @@
         describe('Destruction', function () {
 
             it('calling Destroy', function (done) {
-                var ClassA = DOCUMENT.createItag('i-a29', {
+                var ClassA = DOCUMENT.defineItag('i-a29', {
                         init: function() {
                             this.x = 10;
                         },
@@ -1246,7 +1246,7 @@
             });
 
             it('calling Destroy 2 level', function (done){
-                var ClassA = DOCUMENT.createItag('i-a30', {
+                var ClassA = DOCUMENT.defineItag('i-a30', {
                     destroy: function() {
                         expect(this.x).to.be.equal(5);
                         this.x = 1;
@@ -1276,7 +1276,7 @@
             });
 
             it('calling Destroy 3 level', function (done){
-                var ClassA = DOCUMENT.createItag('i-a31', {
+                var ClassA = DOCUMENT.defineItag('i-a31', {
                     destroy: function() {
                         expect(this.x).to.be.equal(2);
                         this.x = 1;
@@ -1312,7 +1312,7 @@
             });
 
             it('calling Destroy 3 level and force notChained last class', function (done){
-                var ClassA = DOCUMENT.createItag('i-a32', {
+                var ClassA = DOCUMENT.defineItag('i-a32', {
                     destroy: function() {
                         expect(this.x).to.be.equal(2);
                         this.x = 1;
@@ -1348,7 +1348,7 @@
             });
 
             it('calling Destroy 3 level and force notChained second last class', function (done){
-                var ClassA = DOCUMENT.createItag('i-a33', {
+                var ClassA = DOCUMENT.defineItag('i-a33', {
                     destroy: function() {
                         expect(this.x).to.be.equal(2);
                         this.x = 1;
@@ -1384,7 +1384,7 @@
             });
 
             it('calling Destroy 3 level and force notChained last 2 classes', function (done){
-                var ClassA = DOCUMENT.createItag('i-a34', {
+                var ClassA = DOCUMENT.defineItag('i-a34', {
                     destroy: function() {
                         expect(this.x).to.be.equal(2);
                         this.x = 1;
@@ -1420,7 +1420,7 @@
             });
 
             it('calling Destroy 3 level and force notChained last class yet reinitted', function (done){
-                var ClassA = DOCUMENT.createItag('i-a35', {
+                var ClassA = DOCUMENT.defineItag('i-a35', {
                     destroy: function() {
                         expect(this.x).to.be.equal(2);
                         this.x = 1;
@@ -1457,7 +1457,7 @@
             });
 
             it('calling Destroy 3 level and force notChained second last class yet reinitted', function (done){
-                var ClassA = DOCUMENT.createItag('i-a36', {
+                var ClassA = DOCUMENT.defineItag('i-a36', {
                     destroy: function() {
                         expect(this.x).to.be.equal(2);
                         this.x = 1;
@@ -1494,7 +1494,7 @@
             });
 
             it('calling Destroy 3 level and force notChained last 2 classes yet reinitted on last', function (done){
-                var ClassA = DOCUMENT.createItag('i-a37', {
+                var ClassA = DOCUMENT.defineItag('i-a37', {
                     destroy: function() {
                         expect(this.x).to.be.equal(2);
                         this.x = 1;
@@ -1531,7 +1531,7 @@
             });
 
             it('calling Destroy 3 level and force notChained last 2 classes yet reinitted on both', function (done){
-                var ClassA = DOCUMENT.createItag('i-a38', {
+                var ClassA = DOCUMENT.defineItag('i-a38', {
                     destroy: function() {
                         expect(this.x).to.be.equal(2);
                         this.x = 1;
@@ -1574,7 +1574,7 @@
         describe('test $superProp', function () {
 
             it('Properties should be accessable', function () {
-                var C1 = DOCUMENT.createItag('i-c19', {
+                var C1 = DOCUMENT.defineItag('i-c19', {
                     f: function() {
                         return 'F1';
                     },
@@ -1624,7 +1624,7 @@
             });
 
             it('loop', function () {
-                var C1 = DOCUMENT.createItag('i-c23', {
+                var C1 = DOCUMENT.defineItag('i-c23', {
                     f: function() {
                         return this.h();
                     },
@@ -1674,7 +1674,7 @@
             });
 
             it('loop double', function () {
-                var C1 = DOCUMENT.createItag('i-c27', {
+                var C1 = DOCUMENT.defineItag('i-c27', {
                     f: function() {
                         return this.g();
                     },
@@ -1733,7 +1733,7 @@
             });
 
             it('loop with multiple check reset', function () {
-                var C1 = DOCUMENT.createItag('i-c32', {
+                var C1 = DOCUMENT.defineItag('i-c32', {
                     f: function() {
                         return this.g();
                     },
@@ -1820,7 +1820,7 @@
             });
 
             it('Properties should be accessable', function () {
-                var C1 = DOCUMENT.createItag('i-c37', {
+                var C1 = DOCUMENT.defineItag('i-c37', {
                     init: function() {
 
                         expect(this.m).to.be.equal(40);
@@ -1923,7 +1923,7 @@
             });
 
             it('Properties should modified well', function (done) {
-                var C1 = DOCUMENT.createItag('i-c41', {
+                var C1 = DOCUMENT.defineItag('i-c41', {
                         init: function() {
                             this.x = 1;
                         },
@@ -1962,7 +1962,7 @@
         describe('test $super', function () {
 
             it('Properties should be accessable', function () {
-                var C0 = DOCUMENT.createItag('i-c45', {
+                var C0 = DOCUMENT.defineItag('i-c45', {
                     f: function() {
                         return 'F0';
                     },
@@ -2023,7 +2023,7 @@
             });
 
             it('loop', function () {
-                var C0 = DOCUMENT.createItag('i-c50', {
+                var C0 = DOCUMENT.defineItag('i-c50', {
                     f: function() {
                         return this.h();
                     },
@@ -2084,7 +2084,7 @@
             });
 
             it('loop double', function () {
-                var C0 = DOCUMENT.createItag('i-c55', {
+                var C0 = DOCUMENT.defineItag('i-c55', {
                     f: function() {
                         return this.g();
                     },
@@ -2154,7 +2154,7 @@
             });
 
             it('loop with multiple check reset', function () {
-                var C0 = DOCUMENT.createItag('i-c61', {
+                var C0 = DOCUMENT.defineItag('i-c61', {
                     f: function() {
                         return this.g();
                     },
@@ -2265,7 +2265,7 @@
         describe('remove prototypes', function () {
 
             it('Same level', function () {
-                var C0 = DOCUMENT.createItag('i-c67', {
+                var C0 = DOCUMENT.defineItag('i-c67', {
                     f: function() {
                         return 'F0';
                     },
@@ -2282,7 +2282,7 @@
             });
 
             it('Multiple levels', function () {
-                var C0 = DOCUMENT.createItag('i-c68', {
+                var C0 = DOCUMENT.defineItag('i-c68', {
                     f: function() {
                         return 'F0';
                     },
@@ -2310,7 +2310,7 @@
             });
 
             it('Same level - array properties', function () {
-                var C0 = DOCUMENT.createItag('i-c70', {
+                var C0 = DOCUMENT.defineItag('i-c70', {
                     e: function() {
                         return 'E0';
                     },
@@ -2332,7 +2332,7 @@
             });
 
             it('Multiple levels - array properties', function () {
-                var C0 = DOCUMENT.createItag('i-c71', {
+                var C0 = DOCUMENT.defineItag('i-c71', {
                     e: function() {
                         return 'E0';
                     },
@@ -2374,7 +2374,7 @@
 
             it('Elements should be re-initialized', function (done) {
                 var count = 0,
-                    D = DOCUMENT.createItag('i-d1', {
+                    D = DOCUMENT.defineItag('i-d1', {
                     init: function() {
                         this.text = 'first';
                     },
@@ -2409,7 +2409,7 @@
 
             it('Elements should be re-synced', function (done) {
                 var countInit = 0, countDestroy = 0,
-                    D = DOCUMENT.createItag('i-d2', {
+                    D = DOCUMENT.defineItag('i-d2', {
                     init: function() {
                         countInit++;
                         this.text = 'the content';
@@ -2447,7 +2447,7 @@
             it('Elements should be re-initialized', function (done) {
                 var count = 0,
                     initCount = 0,
-                    D = DOCUMENT.createItag('i-d1', {
+                    D = DOCUMENT.defineItag('i-d1', {
                     init: function() {
                         this.text = 'first';
                         initCount++;
@@ -2481,7 +2481,7 @@
 
             it('Elements should be re-synced', function (done) {
                 var countInit = 0, countDestroy = 0,
-                    D = DOCUMENT.createItag('i-d2', {
+                    D = DOCUMENT.defineItag('i-d2', {
                     init: function() {
                         countInit++;
                         this.sometext = 'the content';
@@ -2513,7 +2513,7 @@
         describe('Resync after changes', function () {
 
             it('after attribute change', function (done) {
-                var D = DOCUMENT.createItag('i-d3', {
+                var D = DOCUMENT.defineItag('i-d3', {
                     sync: function() {
                         this.setHTML(this.getAttr('value'));
                     }

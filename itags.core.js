@@ -1077,7 +1077,7 @@ module.exports = function (window) {
      * Internal hash containing all DOM-events that are listened for (at `document`).
      *
      *
-     * @property createItag
+     * @property defineItag
      * @param itagName {String} The name of the itag-element, starting with `i-`
      * @param [prototypes] {Object} Hash map of properties to be added to the prototype of the new class.
      * @param [subClassable=true] {Boolean} whether the Class is subclassable. Can only be set to false on ItagClasses
@@ -1085,7 +1085,7 @@ module.exports = function (window) {
      * @for document
      * @since 0.0.1
     */
-    Object.protectedProp(DOCUMENT, 'createItag', function(itagName, prototypes, subClassable) {
+    Object.protectedProp(DOCUMENT, 'defineItag', function(itagName, prototypes, subClassable) {
         return Classes.ItagBaseClass.subClass.call(Classes.ItagBaseClass, itagName, prototypes, null, null, subClassable);
     });
 
