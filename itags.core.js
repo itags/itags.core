@@ -191,6 +191,8 @@ module.exports = function (window) {
                     }
                 }
                 superInit(constructor || instance.constructor);
+                // because inside `init` model-props might have been set --> these should be refelcted in the dom:
+                itagCore.modelToAttrs(instance);
             }
             return instance;
         },
@@ -290,7 +292,9 @@ module.exports = function (window) {
         */
         defineWhenUndefined: function(key, value) {
             var model = this.model;
-            model[key] || (model[key]=value);
+            if (value!==undefined) {
+                model.hasKey(key) || (model[key]=value);
+            }
             return this;
         },
 
@@ -723,7 +727,7 @@ module.exports = function (window) {
                 model = domElement.model,
                 newAttrs = [];
             attrs.each(function(value, key) {
-                model[key] && (newAttrs[newAttrs.length] = {name: key, value: model[key]});
+                model.hasKey(key) && (newAttrs[newAttrs.length] = {name: key, value: model[key]});
             });
             (newAttrs.length>0) && domElement.setAttrs(newAttrs, true);
         },
