@@ -604,7 +604,7 @@ module.exports = function (window) {
             var instance = this,
                 observer;
             if (element.isItag() && (element.model!==model) && !element.inside('.ce-design-node')) {
-                element.removeAttr('bound-model');
+                element.removeAttr('lazybind');
                 Object.protectedProp(element.vnode, 'ce_boundModel', true);
                 observer = element.getData('_observer');
                 element.model.unobserve(observer);
@@ -947,7 +947,7 @@ module.exports = function (window) {
             // sync, but do this after the element is created:
             // in the next eventcycle:
             async(function(){
-                var needsToBind = (domElement.getAttr('bound-model')==='true');
+                var needsToBind = (domElement.getAttr('lazybind')==='true');
                 // only if no modelbinding is needed, we can directly init, sync and make ready,
                 // otherwise we need to make this done by  `bindModel`
                 BINDING_LIST.some(function(value, selector) {
