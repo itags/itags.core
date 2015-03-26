@@ -446,7 +446,7 @@ module.exports = function (window) {
     */
     PROTECTED_MEMBERS = createHashMap();
     EXTRA_BASE_MEMBERS.each(function(value, key) {
-        ITAG_METHOD_VALUES[key] || (key==='_afterBindModel') || (PROTECTED_MEMBERS[key] = true);
+        ITAG_METHOD_VALUES[key] || (key==='_afterBindModel') || (key==='itagReady') || (PROTECTED_MEMBERS[key] = true);
     });
 
    /**
