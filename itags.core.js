@@ -713,7 +713,8 @@ module.exports = function (window) {
         itagFilter: function(e) {
             console.log(NAME+'itagFilter');
             var node = e.target;
-            return node.vnode.isItag && node.getData('itagRendered');
+            // also check for `destroyUI` --> to prevent errors when cloning while busy rendering
+            return node.vnode.isItag && node.getData('itagRendered') && node.destroyUI;
         },
 
        /**
@@ -799,7 +800,7 @@ module.exports = function (window) {
 
         setLazyBinding: function(ItagClass, value) {
             console.log(NAME+'setLazyBinding');
-            (typeof value === 'boolean') && ItagClass.mergePrototypes({lazyBind: !value}, true, false, true);
+            (typeof value === 'boolean') && ItagClass.mergePrototypes({lazyBind: value}, true, false, true);
         },
 
        /**
