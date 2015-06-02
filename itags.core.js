@@ -1143,12 +1143,19 @@ module.exports = function (window) {
         FunctionPrototype.mergePrototypes = function(prototypes, force, silent) {
             var instance = this,
                 overwriteProtected = arguments[3], // hidden private feature
-                itagEmitterName;
+                itagEmitterName, _attrs;
             if (!instance.$$itag) {
                 // default mergePrototypes
                 instance._mergePrototypes(prototypes, force);
             }
             else {
+                // we need to merge prototypes.attrs into the existing attrs
+                // however, if prototype.attrs is defined, it would overrule the previous definition
+                // therefore, we merge existent attrs-properties into the new prototype.attrs:
+                _attrs = instance.prototype._attrs;
+                if (prototypes.attrs && instance.prototype._attrs) {
+                    prototypes.attrs.merge(_attrs, {force: true});
+                }
                 instance._mergePrototypes(prototypes, force, ITAG_METHODS, overwriteProtected ? null : PROTECTED_MEMBERS);
                 /**
                 * Emitted when prototypes are set on an existing Itag-Class.
