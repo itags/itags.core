@@ -956,7 +956,7 @@ module.exports = function (window) {
             // sync, but do this after the element is created:
             // in the next eventcycle:
             async(function(){
-                var needsToBind = domElement.lazyBind || (domElement.getAttr('lazybind')==='true');
+                var needsToBind = (domElement.lazyBind  && (domElement.getAttr('lazybind')!=='false')) || (domElement.getAttr('lazybind')==='true');
                 // only if no modelbinding is needed, we can directly init, sync and make ready,
                 // otherwise we need to make this done by  `bindModel`
                 BINDING_LIST.some(function(value, selector) {
